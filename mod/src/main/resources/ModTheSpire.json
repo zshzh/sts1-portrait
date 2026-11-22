@@ -1,0 +1,8 @@
+{
+  "modid": "sts1portrait",
+  "name": "STS1 Portrait",
+  "author_list": ["STS1 Portrait contributors"],
+  "description": "Portrait layouts for combat, dungeon navigation, rewards, shops, and handheld controls.",
+  "version": "0.9.0-preview.42",
+  "dependencies": ["basemod"]
+}

@@ -1,0 +1,1170 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 8e1e0eb..5a15435 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -285,6 +285,7 @@ android {
+ 
+     defaultConfig {
+         applicationId = packageName
++        manifestPlaceholders["launcherLabel"] = readGradleProperty("application.label", "Slay the Amethyst Plus")
+         minSdk = 26
+         targetSdk = 33
+         versionCode = appVersionCode
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 8320a08..740be7f 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -27,7 +27,7 @@
+         android:isGame="true"
+         android:allowNativeHeapPointerTagging="false"
+         android:icon="@mipmap/ic_launcher_amethyst"
+-        android:label="Slay the Amethyst"
++        android:label="${launcherLabel}"
+         android:roundIcon="@mipmap/ic_launcher_amethyst_round"
+         android:supportsRtl="true"
+         android:theme="@style/Theme.SlayTheAmethyst"
+@@ -253,7 +253,7 @@
+             android:enabled="true"
+             android:exported="true"
+             android:icon="@mipmap/ic_launcher_amethyst"
+-            android:label="Slay the Amethyst"
++            android:label="${launcherLabel}"
+             android:roundIcon="@mipmap/ic_launcher_amethyst_round"
+             android:targetActivity="io.stamethyst.LauncherActivity">
+             <intent-filter>
+@@ -267,7 +267,7 @@
+             android:enabled="false"
+             android:exported="true"
+             android:icon="@mipmap/ic_launcher_watcher"
+-            android:label="Slay the Amethyst"
++            android:label="${launcherLabel}"
+             android:roundIcon="@mipmap/ic_launcher_watcher_round"
+             android:targetActivity="io.stamethyst.LauncherActivity">
+             <intent-filter>
+diff --git a/app/src/main/java/io/stamethyst/GameOrientationPolicy.kt b/app/src/main/java/io/stamethyst/GameOrientationPolicy.kt
+index 7185c6e..8d53801 100644
+--- a/app/src/main/java/io/stamethyst/GameOrientationPolicy.kt
++++ b/app/src/main/java/io/stamethyst/GameOrientationPolicy.kt
+@@ -13,19 +13,28 @@ internal object GameOrientationPolicy {
+ 
+     internal fun resolveRequestedOrientation(
+         isInMultiWindowMode: Boolean,
+-        preparingGodotBoot: Boolean = false
++        preparingGodotBoot: Boolean = false,
++        portraitGame: Boolean = false
+     ): Int {
+         return if (isInMultiWindowMode) {
+             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+-        } else if (preparingGodotBoot) {
++        } else if (preparingGodotBoot || portraitGame) {
+             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+         } else {
+             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+         }
+     }
+ 
+-    fun apply(activity: Activity, isInMultiWindowMode: Boolean, preparingGodotBoot: Boolean = false) {
+-        applyRequestedOrientation(activity, resolveRequestedOrientation(isInMultiWindowMode, preparingGodotBoot))
++    fun apply(
++        activity: Activity,
++        isInMultiWindowMode: Boolean,
++        preparingGodotBoot: Boolean = false,
++        portraitGame: Boolean = false
++    ) {
++        applyRequestedOrientation(
++            activity,
++            resolveRequestedOrientation(isInMultiWindowMode, preparingGodotBoot, portraitGame)
++        )
+     }
+ 
+     internal fun shouldWaitForLandscape(
+diff --git a/app/src/main/java/io/stamethyst/GameSessionConfig.kt b/app/src/main/java/io/stamethyst/GameSessionConfig.kt
+index 37268d3..367a352 100644
+--- a/app/src/main/java/io/stamethyst/GameSessionConfig.kt
++++ b/app/src/main/java/io/stamethyst/GameSessionConfig.kt
+@@ -9,6 +9,7 @@ import io.stamethyst.backend.render.AndroidGameModeSnapshot
+ import io.stamethyst.backend.render.AndroidGameModeSupport
+ import io.stamethyst.backend.render.RendererBackendResolver
+ import io.stamethyst.backend.render.RendererDecision
++import io.stamethyst.backend.render.CustomGameResolution
+ import io.stamethyst.backend.render.VirtualResolutionMode
+ import io.stamethyst.config.BackBehavior
+ import io.stamethyst.config.FramePacingMode
+@@ -55,7 +56,8 @@ internal data class GameSessionConfig(
+     val gameDisplayRegion: io.stamethyst.backend.render.GameDisplayRegion?,
+     val sustainedPerformanceModeEnabled: Boolean,
+     val keepScreenOnTimeoutMs: Long?,
+-    val systemGameMode: AndroidGameModeSnapshot
++    val systemGameMode: AndroidGameModeSnapshot,
++    val customGameResolution: CustomGameResolution = CustomGameResolution.DEFAULT
+ ) {
+     val renderSurfaceBackend: RenderSurfaceBackend
+         get() = rendererDecision.effectiveSurfaceBackend
+@@ -63,14 +65,20 @@ internal data class GameSessionConfig(
+     val useTextureViewSurface: Boolean
+         get() = renderSurfaceBackend.usesTextureViewSurface
+ 
++    val portraitGame: Boolean
++        get() = virtualResolutionMode.usesPortrait(customGameResolution)
++
+     companion object {
+         fun fromActivityIntent(context: Context, intent: Intent): GameSessionConfig {
++            val customGameResolution = LauncherConfig.readCustomGameResolution(context)
+             val requestedMode = intent.getStringExtra(StsGameActivity.EXTRA_LAUNCH_MODE)
+             val launchMode = if (StsLaunchSpec.isMtsLaunchMode(requestedMode)) {
+                 StsLaunchSpec.LAUNCH_MODE_MTS
+             } else {
+                 StsLaunchSpec.LAUNCH_MODE_VANILLA
+             }
++            val requestedResolution = LauncherConfig.readVirtualResolutionMode(context)
++            val launchResolution = requestedResolution.forGameLaunch(StsLaunchSpec.isMtsLaunchMode(launchMode), customGameResolution)
+             val requestedRenderSurfaceBackend = LauncherConfig.readRenderSurfaceBackend(context)
+             val rendererDecision = RendererBackendResolver.resolve(
+                 context = context,
+@@ -148,16 +156,17 @@ internal data class GameSessionConfig(
+                 autoSwitchLeftAfterRightClick = LauncherConfig.readAutoSwitchLeftAfterRightClick(context),
+                 requestedRenderSurfaceBackend = requestedRenderSurfaceBackend,
+                 rendererDecision = rendererDecision,
+-                virtualResolutionMode = LauncherConfig.readVirtualResolutionMode(context),
++                virtualResolutionMode = launchResolution,
+                 avoidDisplayCutout = LauncherConfig.isDisplayCutoutAvoidanceEnabled(context),
+                 cropScreenBottom = LauncherConfig.isScreenBottomCropEnabled(context),
+-                gameDisplayRegion = LauncherConfig.readGameDisplayRegion(context),
++                gameDisplayRegion = if (launchResolution == requestedResolution) LauncherConfig.readGameDisplayRegion(context) else null,
+                 sustainedPerformanceModeEnabled =
+                     LauncherConfig.isSustainedPerformanceModeEnabled(context),
+                 keepScreenOnTimeoutMs = LauncherConfig.keepScreenOnTimeoutMs(
+                     LauncherConfig.readKeepScreenOnTimeoutMinutes(context)
+                 ),
+-                systemGameMode = systemGameMode
++                systemGameMode = systemGameMode,
++                customGameResolution = customGameResolution
+             )
+         }
+ 
+diff --git a/app/src/main/java/io/stamethyst/GameSessionCoordinator.kt b/app/src/main/java/io/stamethyst/GameSessionCoordinator.kt
+index 1b9cb53..7a04d10 100644
+--- a/app/src/main/java/io/stamethyst/GameSessionCoordinator.kt
++++ b/app/src/main/java/io/stamethyst/GameSessionCoordinator.kt
+@@ -68,6 +68,7 @@ internal class GameSessionCoordinator(
+         private const val EXPECTED_GAME_EXIT_PROCESS_KILL_DELAY_MS = 1500L
+         private const val EXPECTED_GAME_EXIT_LAUNCHER_RESTART_DELAY_MS = 180L
+         private const val LANDSCAPE_WAIT_TIMEOUT_MS = 4000L
++        private const val PORTRAIT_WAIT_TIMEOUT_MS = 8000L
+ 
+         internal fun shouldAttemptPostBootSurfaceSoftRefresh(
+             useTextureViewSurface: Boolean,
+@@ -107,6 +108,7 @@ internal class GameSessionCoordinator(
+     private var userLeaveHintReceived = false
+ 
+     private var waitingLandscapeSinceMs = -1L
++    private var waitingPortraitSinceMs = -1L
+     private var lastJvmLaunchGateLogAtMs = -1L
+     private var jvmLaunchStartedWallTimeMs = 0L
+     private var startCheckPosted = false
+@@ -281,7 +283,8 @@ internal class GameSessionCoordinator(
+             renderSurfaceManager.syncDisplayConfigToSurfaceSize()
+         },
+         getWindowWidth = { renderSurfaceManager.resolvePhysicalWidth() },
+-        getWindowHeight = { renderSurfaceManager.resolvePhysicalHeight() }
++        getWindowHeight = { renderSurfaceManager.resolvePhysicalHeight() },
++        getPortraitSafeArea = { renderSurfaceManager.portraitSafeArea }
+     )
+ 
+     val jvmLaunchStarted: Boolean
+@@ -527,6 +530,25 @@ internal class GameSessionCoordinator(
+         val rawWidth = renderSurfaceManager.resolvePhysicalWidth()
+         val rawHeight = renderSurfaceManager.resolvePhysicalHeight()
+ 
++        if (config.portraitGame) {
++            if (renderSurfaceManager.isPortraitPreviewViewportReady()) {
++                renderSurfaceManager.lockWindowSizeForJvmStartup()
++                logJvmLaunchGate("starting_portrait_preview", rawWidth, rawHeight, force = true)
++                startJvmOnce()
++            } else {
++                val now = SystemClock.uptimeMillis()
++                if (waitingPortraitSinceMs < 0) waitingPortraitSinceMs = now
++                if (now - waitingPortraitSinceMs >= PORTRAIT_WAIT_TIMEOUT_MS) {
++                    Toast.makeText(activity, R.string.portrait_preview_window_unavailable, Toast.LENGTH_LONG).show()
++                    onJvmLaunchFinished()
++                    activity.finish()
++                } else {
++                    scheduleStartCheck()
++                }
++            }
++            return
++        }
++
+         if (rawWidth <= 1 || rawHeight <= 1) {
+             logJvmLaunchGate("waiting_for_size", rawWidth, rawHeight)
+             scheduleStartCheck()
+diff --git a/app/src/main/java/io/stamethyst/RenderSurfaceManager.kt b/app/src/main/java/io/stamethyst/RenderSurfaceManager.kt
+index 0460e77..45ecc25 100644
+--- a/app/src/main/java/io/stamethyst/RenderSurfaceManager.kt
++++ b/app/src/main/java/io/stamethyst/RenderSurfaceManager.kt
+@@ -21,6 +21,7 @@ import io.stamethyst.backend.render.FullscreenCanvasResolution
+ import io.stamethyst.backend.render.ForegroundResyncScheduler
+ import io.stamethyst.backend.render.RenderSurfaceState
+ import io.stamethyst.backend.render.VirtualResolutionPolicy
++import io.stamethyst.backend.render.CustomGameResolution
+ import io.stamethyst.backend.render.VirtualResolutionMode
+ import io.stamethyst.backend.render.ViewFrameRateVote
+ import io.stamethyst.backend.render.shouldRequestHighViewFrameRate
+@@ -64,6 +65,7 @@ class RenderSurfaceManager(
+     private val targetFpsLimit: Float,
+     useTextureViewSurface: Boolean,
+     private val virtualResolutionMode: VirtualResolutionMode,
++    private val customGameResolution: CustomGameResolution,
+     avoidDisplayCutout: Boolean,
+     cropScreenBottom: Boolean,
+     private val gameDisplayRegion: io.stamethyst.backend.render.GameDisplayRegion?,
+@@ -71,7 +73,12 @@ class RenderSurfaceManager(
+     private val onSurfaceReady: () -> Unit,
+     private val onTextureFrameUpdate: (Long) -> Unit
+ ) {
+-    private val avoidDisplayCutout = gameDisplayRegion == null && avoidDisplayCutout
++    private val portraitGame = virtualResolutionMode.usesPortrait(customGameResolution)
++
++    @Volatile
++    var portraitSafeArea: String? = null
++        private set
++    private val avoidDisplayCutout = !portraitGame && gameDisplayRegion == null && avoidDisplayCutout
+     private val cropScreenBottom = gameDisplayRegion == null && cropScreenBottom
+     private val state = RenderSurfaceState()
+     private val resyncScheduler = ForegroundResyncScheduler()
+@@ -359,6 +366,22 @@ class RenderSurfaceManager(
+         dispatchWindowSize(buildApplyPlan(renderView.width, renderView.height))
+     }
+ 
++    fun isPortraitPreviewViewportReady(): Boolean {
++        val root = renderRoot ?: return false
++        if (!::renderView.isInitialized || root.width <= 1 || root.width >= root.height) return false
++        val insets = currentWindowInsets() ?: return false
++        val cropInsets = resolveViewportCropInsets(insets, resolveWindowConstrainedCropHint(root))
++        val resolution = resolveVirtualResolutionForViewport(root.width, root.height, cropInsets, lockResolution = false)
++        if (resolution.width < VirtualResolutionPolicy.MIN_GAME_WIDTH || resolution.width >= resolution.height) {
++            return false
++        }
++        val layout = resolveFixedVirtualViewportLayout(
++            root.width, root.height, cropInsets, resolution.width, resolution.height, ignoreViewportPixelRounding(),
++        ) ?: return false
++        return renderView.isAttachedToWindow && !renderView.isLayoutRequested &&
++            renderView.width == layout.width && renderView.height == layout.height
++    }
++
+     /**
+      * Freezes the logical game window immediately before the JVM is launched.
+      *
+@@ -390,6 +413,12 @@ class RenderSurfaceManager(
+             lockResolution = true
+         )
+         logicalWindowLockedForJvmStartup = startupVirtualResolution != null
++        if (portraitGame && insets != null) {
++            val safe = mergeViewportInsets(resolveCameraAvoidanceInsets(insets), resolveGestureInsets(insets))
++            portraitSafeArea = formatPortraitViewportSafeArea(
++                safe, rootWidth, rootHeight, resolution, cropInsets, ignoreViewportPixelRounding(),
++            )
++        }
+         println(
+             "RenderSurfaceLogicalWindow: locked " +
+                 "window=${resolution.width}x${resolution.height}, " +
+@@ -811,7 +840,8 @@ class RenderSurfaceManager(
+             physicalWidth = canvas?.width ?: fullscreenCanvas.width,
+             physicalHeight = canvas?.height ?: fullscreenCanvas.height,
+             renderScale = renderScale,
+-            mode = virtualResolutionMode
++            mode = virtualResolutionMode,
++            custom = customGameResolution
+         ).also { fullscreenVirtualResolution = it }
+     }
+ 
+@@ -826,6 +856,11 @@ class RenderSurfaceManager(
+         lockResolution: Boolean = true
+     ): io.stamethyst.backend.render.VirtualResolution {
+         startupVirtualResolution?.let { return it }
++        if (portraitGame) {
++            val canvas = resolveViewportCanvasSize(rootWidth, rootHeight, cropInsets)
++            return VirtualResolutionPolicy.resolve(canvas.width, canvas.height, renderScale, virtualResolutionMode, customGameResolution)
++                .also { if (lockResolution) startupVirtualResolution = it }
++        }
+         if (shouldDeferToDisplayDerivedCanvas(rootWidth, rootHeight)) {
+             // The game always runs landscape. A portrait root only means the window has not
+             // rotated yet (manifest sensorLandscape) or a portrait boot overlay such as the
+@@ -847,7 +882,8 @@ class RenderSurfaceManager(
+             physicalWidth = canvasSize.width,
+             physicalHeight = canvasSize.height,
+             renderScale = renderScale,
+-            mode = virtualResolutionMode
++            mode = virtualResolutionMode,
++            custom = customGameResolution
+         ).also {
+             if (lockResolution) {
+                 startupVirtualResolution = it
+@@ -869,7 +905,7 @@ class RenderSurfaceManager(
+             rootWidth = root.width,
+             rootHeight = root.height,
+             cropInsets = cropInsets,
+-            lockResolution = !avoidDisplayCutout || insets != null
++            lockResolution = !portraitGame && (!avoidDisplayCutout || insets != null)
+         )
+     }
+ 
+@@ -954,7 +990,7 @@ class RenderSurfaceManager(
+             rootWidth = rootWidth,
+             rootHeight = rootHeight,
+             cropInsets = cropInsets,
+-            lockResolution = !avoidDisplayCutout || resolvedInsets != null
++            lockResolution = !portraitGame && (!avoidDisplayCutout || resolvedInsets != null)
+         )
+         val layout = resolveFixedVirtualViewportLayout(
+             rootWidth = rootWidth,
+@@ -962,7 +998,7 @@ class RenderSurfaceManager(
+             cropInsets = cropInsets,
+             virtualWidth = virtualResolution.width,
+             virtualHeight = virtualResolution.height,
+-            ignorePixelRounding = gameDisplayRegion != null && virtualResolutionMode == VirtualResolutionMode.FULLSCREEN_FILL,
++            ignorePixelRounding = ignoreViewportPixelRounding(),
+         ) ?: return
+         val params = (renderView.layoutParams as? FrameLayout.LayoutParams)
+             ?: FrameLayout.LayoutParams(
+@@ -1083,6 +1119,9 @@ class RenderSurfaceManager(
+         )
+     }
+ 
++    private fun ignoreViewportPixelRounding(): Boolean = gameDisplayRegion != null &&
++        (virtualResolutionMode == VirtualResolutionMode.FULLSCREEN_FILL || virtualResolutionMode.isPortrait)
++
+     private fun resolveViewportCropInsets(
+         insets: WindowInsetsCompat?,
+         windowCropHint: RenderViewportCropHint? = null
+@@ -1097,7 +1136,7 @@ class RenderSurfaceManager(
+             val rotation = resolveDisplayRotation()
+             val canonicalRotation = io.stamethyst.backend.render.DisplayGeometryRotation
+                 .canonicalLandscapeRotation(metrics.widthPixels, metrics.heightPixels, rotation)
+-            val region = if ((rotation - canonicalRotation + 4) % 4 == 2) {
++            val region = if (!portraitGame && (rotation - canonicalRotation + 4) % 4 == 2) {
+                 canonicalRegion.rotated180()
+             } else canonicalRegion
+             val rect = region.toPixels(root.width, root.height)
+@@ -1265,6 +1304,31 @@ class RenderSurfaceManager(
+         private const val WINDOW_MODE_SURFACE_REFRESH_DELAY_MS = 420L
+         private const val WINDOW_MODE_SURFACE_REFRESH_HIDDEN_MS = 32L
+ 
++        internal fun formatPortraitViewportSafeArea(
++            safe: RenderViewportInsets,
++            rootWidth: Int,
++            rootHeight: Int,
++            resolution: io.stamethyst.backend.render.VirtualResolution,
++            cropInsets: RenderViewportInsets = RenderViewportInsets(),
++            ignorePixelRounding: Boolean = false,
++        ): String? {
++            val viewport = resolveFixedVirtualViewportLayout(
++                rootWidth, rootHeight, cropInsets, resolution.width, resolution.height, ignorePixelRounding,
++            ) ?: return null
++            return formatPortraitSafeArea(
++                RenderViewportInsets(
++                    left = (safe.left - viewport.leftMargin).coerceAtLeast(0),
++                    top = (safe.top - viewport.topMargin).coerceAtLeast(0),
++                    right = (safe.right - viewport.rightMargin).coerceAtLeast(0),
++                    bottom = (safe.bottom - viewport.bottomMargin).coerceAtLeast(0)
++                ), viewport.width, viewport.height
++            )
++        }
++
++        internal fun formatPortraitSafeArea(insets: RenderViewportInsets, width: Int, height: Int): String =
++            listOf(insets.left.toFloat() / width, insets.top.toFloat() / height,
++                insets.right.toFloat() / width, insets.bottom.toFloat() / height).joinToString(",")
++
+         internal fun shouldDeferPortraitLandscapeTransition(
+             rootWidth: Int,
+             rootHeight: Int,
+diff --git a/app/src/main/java/io/stamethyst/StsGameActivity.kt b/app/src/main/java/io/stamethyst/StsGameActivity.kt
+index 9fee66b..d745228 100644
+--- a/app/src/main/java/io/stamethyst/StsGameActivity.kt
++++ b/app/src/main/java/io/stamethyst/StsGameActivity.kt
+@@ -227,9 +227,9 @@ open class StsGameActivity : AppCompatActivity(), SensorEventListener {
+         EasyTierGameProcessPriorityBinding.attach(this)
+         setContentView(R.layout.activity_game)
+         setVolumeControlStream(AudioManager.STREAM_MUSIC)
++        sessionConfig = GameSessionConfig.fromActivityIntent(this, intent)
+         applyGameActivityOrientation()
+ 
+-        sessionConfig = GameSessionConfig.fromActivityIntent(this, intent)
+         GamePresenceStateMarker.markGameActive(this, sessionConfig.launchMode)
+         RuntimePaths.richPresenceFile(this).delete()
+         MemoryDiagnosticsLogger.logEvent(
+@@ -598,6 +598,7 @@ open class StsGameActivity : AppCompatActivity(), SensorEventListener {
+             targetFpsLimit = sessionConfig.effectiveTargetFps,
+             useTextureViewSurface = sessionConfig.useTextureViewSurface,
+             virtualResolutionMode = sessionConfig.virtualResolutionMode,
++            customGameResolution = sessionConfig.customGameResolution,
+             avoidDisplayCutout = sessionConfig.avoidDisplayCutout,
+             cropScreenBottom = sessionConfig.cropScreenBottom,
+             gameDisplayRegion = sessionConfig.gameDisplayRegion,
+@@ -706,9 +707,10 @@ open class StsGameActivity : AppCompatActivity(), SensorEventListener {
+     }
+ 
+     private fun applyGameActivityOrientation() {
+-        // The Android window stays portrait until entry; the game's logical Surface buffer
+-        // remains landscape (RenderSurfaceManager's display-derived startup canvas).
+-        GameOrientationPolicy.apply(this, isInMultiWindowMode, isGodotBootPreparing)
++        GameOrientationPolicy.apply(
++            this, isInMultiWindowMode, isGodotBootPreparing,
++            portraitGame = ::sessionConfig.isInitialized && sessionConfig.portraitGame
++        )
+     }
+ 
+     fun setBootOverlayKeepScreenOn(enabled: Boolean) {
+diff --git a/app/src/main/java/io/stamethyst/backend/diag/LauncherSettingsCatalog.kt b/app/src/main/java/io/stamethyst/backend/diag/LauncherSettingsCatalog.kt
+index 51619ab..7394240 100644
+--- a/app/src/main/java/io/stamethyst/backend/diag/LauncherSettingsCatalog.kt
++++ b/app/src/main/java/io/stamethyst/backend/diag/LauncherSettingsCatalog.kt
+@@ -1270,6 +1270,10 @@ private fun virtualResolutionModeZh(zh: Context, mode: VirtualResolutionMode): S
+     VirtualResolutionMode.RESOLUTION_720P -> zh.getString(R.string.settings_virtual_resolution_mode_720p)
+     VirtualResolutionMode.RATIO_4_3 -> zh.getString(R.string.settings_virtual_resolution_mode_4_3)
+     VirtualResolutionMode.RATIO_16_9 -> zh.getString(R.string.settings_virtual_resolution_mode_16_9)
++    VirtualResolutionMode.CUSTOM ->
++        zh.getString(R.string.custom_resolution_title)
++    VirtualResolutionMode.PORTRAIT_FILL ->
++        zh.getString(R.string.portrait_fill_mode)
+ }
+ 
+ private fun keepScreenOnTimeoutZh(zh: Context, minutes: Int): String =
+diff --git a/app/src/main/java/io/stamethyst/backend/launch/JvmLaunchController.kt b/app/src/main/java/io/stamethyst/backend/launch/JvmLaunchController.kt
+index 1a040c6..341adce 100644
+--- a/app/src/main/java/io/stamethyst/backend/launch/JvmLaunchController.kt
++++ b/app/src/main/java/io/stamethyst/backend/launch/JvmLaunchController.kt
+@@ -64,7 +64,8 @@ class JvmLaunchController(
+     private val mtsModFileListOverride: File? = null,
+     private val mtsModFileListAudit: File? = null,
+     /** ModTheSpire's `--mods` list for this run; those ids must all resolve to loaded mods. */
+-    private val mtsLaunchModIdsOverride: List<String>? = null
++    private val mtsLaunchModIdsOverride: List<String>? = null,
++    private val getPortraitSafeArea: () -> String? = { null }
+ ) {
+     private class LaunchCancelledException : IOException("Launch cancelled")
+ 
+@@ -407,7 +408,8 @@ class JvmLaunchController(
+                             effectiveTargetFps,
+                             mtsModFileListOverride,
+                             mtsModFileListAudit,
+-                            mtsLaunchModIdsOverride
++                            mtsLaunchModIdsOverride,
++                            portraitSafeArea = getPortraitSafeArea()
+                         )
+                     )
+                     args
+diff --git a/app/src/main/java/io/stamethyst/backend/launch/StsLaunchSpec.kt b/app/src/main/java/io/stamethyst/backend/launch/StsLaunchSpec.kt
+index 9bed9c9..643c83c 100644
+--- a/app/src/main/java/io/stamethyst/backend/launch/StsLaunchSpec.kt
++++ b/app/src/main/java/io/stamethyst/backend/launch/StsLaunchSpec.kt
+@@ -143,7 +143,8 @@ object StsLaunchSpec {
+         effectiveTargetFpsOverride: Float? = null,
+         mtsModFileListOverride: File? = null,
+         mtsModFileListAudit: File? = null,
+-        mtsLaunchModIdsOverride: List<String>? = null
++        mtsLaunchModIdsOverride: List<String>? = null,
++        portraitSafeArea: String? = null
+     ): List<String> {
+         val stsRoot = RuntimePaths.stsRoot(context)
+         val stsHome = RuntimePaths.stsHome(context)
+@@ -476,7 +477,9 @@ object StsLaunchSpec {
+             args.add("-Damethyst.renderer.fallback_reason=$it")
+         }
+         val renderScale = renderScaleOverride ?: LauncherConfig.readRenderScale(context)
++        val customGameResolution = LauncherConfig.readCustomGameResolution(context)
+         val virtualResolutionMode = LauncherConfig.readVirtualResolutionMode(context)
++            .forGameLaunch(isMtsLaunchMode(launchMode), customGameResolution)
+         val physicalWidth = Math.max(1, CallbackBridge.physicalWidth)
+         val physicalHeight = Math.max(1, CallbackBridge.physicalHeight)
+         val fullscreenCanvas = FullscreenCanvasResolution.resolve(context)
+@@ -486,7 +489,8 @@ object StsLaunchSpec {
+             physicalWidth = displayRegion?.width ?: fullscreenCanvas.width,
+             physicalHeight = displayRegion?.height ?: fullscreenCanvas.height,
+             renderScale = renderScale,
+-            mode = virtualResolutionMode
++            mode = virtualResolutionMode,
++            custom = customGameResolution
+         )
+         val launchVirtualSize = resolveLaunchVirtualSize(
+             bridgeWidth = CallbackBridge.windowWidth,
+@@ -541,6 +545,9 @@ object StsLaunchSpec {
+         args.add("-Dglfwstub.physicalHeight=$physicalHeight")
+         args.add("-Damethyst.gdx.virtual_width=$virtualWidth")
+         args.add("-Damethyst.gdx.virtual_height=$virtualHeight")
++        if (virtualResolutionMode.usesPortrait(customGameResolution) && portraitSafeArea != null) {
++            args.add("-Dsts1portrait.safe_area=$portraitSafeArea")
++        }
+         args.add("-Dglfwstub.initEgl=false")
+         args.add("-Djava.awt.headless=false")
+         args.add("-Dcacio.managed.screensize=${AWTCanvasView.AWT_CANVAS_WIDTH}x${AWTCanvasView.AWT_CANVAS_HEIGHT}")
+diff --git a/app/src/main/java/io/stamethyst/backend/render/CustomGameResolution.kt b/app/src/main/java/io/stamethyst/backend/render/CustomGameResolution.kt
+new file mode 100644
+index 0000000..469f8ce
+--- /dev/null
++++ b/app/src/main/java/io/stamethyst/backend/render/CustomGameResolution.kt
+@@ -0,0 +1,20 @@
++package io.stamethyst.backend.render
++
++data class CustomGameResolution private constructor(val width: Int, val height: Int) {
++    val portrait: Boolean get() = width < height
++
++    companion object {
++        val DEFAULT = CustomGameResolution(1080, 2340)
++        const val MAX_DIMENSION = 4096
++        private const val MAX_PIXELS = 8_388_608
++
++        fun validate(width: Int?, height: Int?): CustomGameResolution? {
++            if (width == null || height == null) return null
++            if (width !in VirtualResolutionPolicy.MIN_GAME_WIDTH..MAX_DIMENSION ||
++                height !in VirtualResolutionPolicy.MIN_GAME_HEIGHT..MAX_DIMENSION ||
++                width * height > MAX_PIXELS
++            ) return null
++            return CustomGameResolution(width, height)
++        }
++    }
++}
+diff --git a/app/src/main/java/io/stamethyst/backend/render/GameResolutionDraft.kt b/app/src/main/java/io/stamethyst/backend/render/GameResolutionDraft.kt
+index 84db17a..39d27ff 100644
+--- a/app/src/main/java/io/stamethyst/backend/render/GameResolutionDraft.kt
++++ b/app/src/main/java/io/stamethyst/backend/render/GameResolutionDraft.kt
+@@ -2,10 +2,14 @@ package io.stamethyst.backend.render
+ 
+ import kotlin.math.roundToInt
+ 
+-internal data class GameResolutionDraft(val region: GameDisplayRegion, val scale: Float) {
++internal data class GameResolutionDraft(
++    val region: GameDisplayRegion,
++    val scale: Float,
++    val mode: VirtualResolutionMode = VirtualResolutionMode.FULLSCREEN_FILL,
++) {
+     fun withRegion(region: GameDisplayRegion, width: Int, height: Int): GameResolutionDraft {
+         val area = region.toPixels(width, height)
+-        return GameResolutionDraft(region, scale.coerceIn(VirtualResolutionPolicy.minimumScale(area.width, area.height), 1f))
++        return copy(region = region, scale = scale.coerceIn(VirtualResolutionPolicy.minimumScale(area.width, area.height), 1f))
+     }
+ 
+     companion object {
+@@ -17,8 +21,8 @@ internal data class GameResolutionDraft(val region: GameDisplayRegion, val scale
+             width: Int,
+             height: Int,
+         ): GameResolutionDraft {
+-            if (mode == VirtualResolutionMode.FULLSCREEN_FILL) {
+-                return GameResolutionDraft(region, scale).withRegion(region, width, height)
++            if (mode == VirtualResolutionMode.FULLSCREEN_FILL || mode.isPortrait) {
++                return GameResolutionDraft(region, scale, mode).withRegion(region, width, height)
+             }
+             val area = region.toPixels(width, height)
+             val render = VirtualResolutionPolicy.resolve(area.width, area.height, scale, mode)
+@@ -32,11 +36,12 @@ internal data class GameResolutionDraft(val region: GameDisplayRegion, val scale
+ }
+ 
+ internal enum class GameResolutionPreset {
+-    FULLSCREEN, HD, PERFORMANCE, CLASSIC;
++    FULLSCREEN, PORTRAIT, HD, PERFORMANCE, CLASSIC;
+ 
+     fun resolve(width: Int, height: Int): GameResolutionDraft? {
+         val fullscreen = GameDisplayRegion.FULLSCREEN
+         if (this == FULLSCREEN) return GameResolutionDraft(fullscreen, 1f)
++        if (this == PORTRAIT) return GameResolutionDraft(fullscreen, 1f, VirtualResolutionMode.PORTRAIT_FILL)
+         val ratio = if (this == CLASSIC) 4.0 / 3 else 16.0 / 9
+         val widthAtFullHeight = (height * ratio).roundToInt()
+         val w = minOf(width, widthAtFullHeight)
+diff --git a/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionMode.kt b/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionMode.kt
+index 97e4d3e..45cba71 100644
+--- a/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionMode.kt
++++ b/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionMode.kt
+@@ -7,10 +7,20 @@ enum class VirtualResolutionMode(
+     val fixedBaseHeight: Int? = null
+ ) {
+     FULLSCREEN_FILL("fullscreen_fill", null),
++    PORTRAIT_FILL("portrait_fill", null),
+     RESOLUTION_1080P("1080p", 16f / 9f, 1920, 1080),
+     RESOLUTION_720P("720p", 16f / 9f, 1280, 720),
+     RATIO_4_3("4_3", 4f / 3f),
+-    RATIO_16_9("16_9", 16f / 9f);
++    RATIO_16_9("16_9", 16f / 9f),
++    CUSTOM("custom", null);
++
++    val isPortrait: Boolean
++        get() = this == PORTRAIT_FILL
++
++    fun usesPortrait(custom: CustomGameResolution): Boolean = isPortrait || (this == CUSTOM && custom.portrait)
++
++    fun forGameLaunch(modded: Boolean, custom: CustomGameResolution = CustomGameResolution.DEFAULT): VirtualResolutionMode =
++        if (usesPortrait(custom) && !modded) FULLSCREEN_FILL else this
+ 
+     companion object {
+         @JvmStatic
+@@ -18,6 +28,7 @@ enum class VirtualResolutionMode(
+             if (value.isNullOrBlank()) {
+                 return null
+             }
++            if (value.trim() == "portrait_preview") return PORTRAIT_FILL
+             return entries.firstOrNull { it.persistedValue == value.trim() }
+         }
+     }
+diff --git a/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionPolicy.kt b/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionPolicy.kt
+index 9f570e7..a5fbc4b 100644
+--- a/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionPolicy.kt
++++ b/app/src/main/java/io/stamethyst/backend/render/VirtualResolutionPolicy.kt
+@@ -11,14 +11,20 @@ object VirtualResolutionPolicy {
+         physicalWidth: Int,
+         physicalHeight: Int,
+         renderScale: Float,
+-        mode: VirtualResolutionMode = VirtualResolutionMode.FULLSCREEN_FILL
++        mode: VirtualResolutionMode = VirtualResolutionMode.FULLSCREEN_FILL,
++        custom: CustomGameResolution = CustomGameResolution.DEFAULT
+     ): VirtualResolution {
++        if (mode == VirtualResolutionMode.CUSTOM) return VirtualResolution(custom.width, custom.height, 1f)
+         val viewportSize = resolveViewportSize(physicalWidth, physicalHeight, mode)
+         val baseWidth = mode.fixedBaseWidth ?: viewportSize.width
+         val baseHeight = mode.fixedBaseHeight ?: viewportSize.height
+-        val effectiveScale = renderScale.takeIf(Float::isFinite)?.coerceIn(minimumScale(baseWidth, baseHeight), 1f) ?: 1f
++        val needsPortraitUpscale = mode.isPortrait && baseWidth < MIN_GAME_WIDTH && baseWidth < baseHeight
++        val maximum = if (needsPortraitUpscale) MIN_GAME_WIDTH.toFloat() / baseWidth else 1f
++        val effectiveScale = (renderScale.takeIf(Float::isFinite) ?: 1f).coerceIn(
++            if (needsPortraitUpscale) maximum else minimumScale(baseWidth, baseHeight), maximum,
++        )
+         return VirtualResolution(
+-            width = (baseWidth * effectiveScale).toInt().coerceAtLeast(1),
++            width = (baseWidth * effectiveScale).toInt().coerceAtLeast(if (needsPortraitUpscale) MIN_GAME_WIDTH else 1),
+             height = (baseHeight * effectiveScale).toInt().coerceAtLeast(1),
+             effectiveScale = effectiveScale
+         )
+diff --git a/app/src/main/java/io/stamethyst/config/LauncherConfig.kt b/app/src/main/java/io/stamethyst/config/LauncherConfig.kt
+index bf9f516..fb90658 100644
+--- a/app/src/main/java/io/stamethyst/config/LauncherConfig.kt
++++ b/app/src/main/java/io/stamethyst/config/LauncherConfig.kt
+@@ -20,6 +20,7 @@ import io.stamethyst.backend.steamcloud.SteamCloudSyncBlacklist
+ import io.stamethyst.backend.mods.ImportDownscaleMaterialPolicy
+ import io.stamethyst.backend.mods.RuntimeDownscaleMaterialPolicy
+ import io.stamethyst.backend.mods.RuntimeTextureAtlasDownscaleQuality
++import io.stamethyst.backend.render.CustomGameResolution
+ import io.stamethyst.backend.render.VirtualResolutionMode
+ import io.stamethyst.backend.steamcloud.SteamCloudOperationMutex
+ import io.stamethyst.config.RuntimePaths
+@@ -109,6 +110,8 @@ object LauncherConfig {
+     private const val PREF_KEY_MOBILE_HUD_ENABLED = "mobile_hud_enabled"
+     private const val PREF_KEY_COMPENDIUM_UPGRADE_TOUCH_FIX_ENABLED =
+         "compendium_upgrade_touch_fix_enabled"
++    private const val PREF_KEY_CUSTOM_GAME_WIDTH = "custom_game_width"
++    private const val PREF_KEY_CUSTOM_GAME_HEIGHT = "custom_game_height"
+     private const val PREF_KEY_VIRTUAL_RESOLUTION_MODE = "virtual_resolution_mode"
+     private const val PREF_KEY_AVOID_DISPLAY_CUTOUT = "avoid_display_cutout"
+     private const val PREF_KEY_CROP_SCREEN_BOTTOM = "crop_screen_bottom"
+@@ -1281,6 +1284,22 @@ object LauncherConfig {
+         }
+     }
+ 
++    fun readCustomGameResolution(context: Context): CustomGameResolution {
++        val settings = prefs(context)
++        return CustomGameResolution.validate(
++            settings.getInt(PREF_KEY_CUSTOM_GAME_WIDTH, CustomGameResolution.DEFAULT.width),
++            settings.getInt(PREF_KEY_CUSTOM_GAME_HEIGHT, CustomGameResolution.DEFAULT.height)
++        ) ?: CustomGameResolution.DEFAULT
++    }
++
++    fun saveCustomGameResolution(context: Context, custom: CustomGameResolution) {
++        prefs(context).edit {
++            putInt(PREF_KEY_CUSTOM_GAME_WIDTH, custom.width)
++            putInt(PREF_KEY_CUSTOM_GAME_HEIGHT, custom.height)
++            putString(PREF_KEY_VIRTUAL_RESOLUTION_MODE, VirtualResolutionMode.CUSTOM.persistedValue)
++        }
++    }
++
+     fun isDisplayCutoutAvoidanceEnabled(context: Context): Boolean {
+         return prefs(context).getBoolean(
+             PREF_KEY_AVOID_DISPLAY_CUTOUT,
+@@ -1325,10 +1344,11 @@ object LauncherConfig {
+         context: Context,
+         region: io.stamethyst.backend.render.GameDisplayRegion,
+         renderScale: Float,
++        mode: VirtualResolutionMode = VirtualResolutionMode.FULLSCREEN_FILL,
+     ) {
+         prefs(context).edit {
+             putString(PREF_KEY_GAME_DISPLAY_REGION, region.persistedValue())
+-            putString(PREF_KEY_VIRTUAL_RESOLUTION_MODE, VirtualResolutionMode.FULLSCREEN_FILL.persistedValue)
++            putString(PREF_KEY_VIRTUAL_RESOLUTION_MODE, mode.persistedValue)
+             putFloat(PREF_KEY_GAME_RENDER_SCALE, renderScale.coerceIn(MIN_RENDER_SCALE, MAX_RENDER_SCALE))
+             putBoolean(PREF_KEY_AVOID_DISPLAY_CUTOUT, false)
+             putBoolean(PREF_KEY_CROP_SCREEN_BOTTOM, false)
+diff --git a/app/src/main/java/io/stamethyst/ui/settings/core/SettingsScreenViewModel.kt b/app/src/main/java/io/stamethyst/ui/settings/core/SettingsScreenViewModel.kt
+index f9760bd..873ac69 100644
+--- a/app/src/main/java/io/stamethyst/ui/settings/core/SettingsScreenViewModel.kt
++++ b/app/src/main/java/io/stamethyst/ui/settings/core/SettingsScreenViewModel.kt
+@@ -4087,11 +4087,11 @@ class SettingsScreenViewModel : ViewModel() {
+     internal fun onGameResolutionSaved(host: Activity, draft: io.stamethyst.backend.render.GameResolutionDraft) {
+         if (uiState.busy) return
+         val normalized = draft.region.normalized()
+-        LauncherConfig.saveGameResolution(host, normalized, draft.scale)
++        LauncherConfig.saveGameResolution(host, normalized, draft.scale, draft.mode)
+         uiState = uiState.copy(
+             gameDisplayRegion = normalized,
+             selectedRenderScale = draft.scale,
+-            virtualResolutionMode = VirtualResolutionMode.FULLSCREEN_FILL,
++            virtualResolutionMode = draft.mode,
+             avoidDisplayCutout = false,
+             cropScreenBottom = false,
+         )
+@@ -5953,6 +5953,10 @@ class SettingsScreenViewModel : ViewModel() {
+                 host.getString(R.string.settings_virtual_resolution_mode_4_3)
+             VirtualResolutionMode.RATIO_16_9 ->
+                 host.getString(R.string.settings_virtual_resolution_mode_16_9)
++            VirtualResolutionMode.CUSTOM ->
++                host.getString(R.string.custom_resolution_title)
++            VirtualResolutionMode.PORTRAIT_FILL ->
++                host.getString(R.string.portrait_fill_mode)
+         }
+     }
+ 
+diff --git a/app/src/main/java/io/stamethyst/ui/settings/sections/DeviceDisplayGeometry.kt b/app/src/main/java/io/stamethyst/ui/settings/sections/DeviceDisplayGeometry.kt
+index 654f3ff..0897099 100644
+--- a/app/src/main/java/io/stamethyst/ui/settings/sections/DeviceDisplayGeometry.kt
++++ b/app/src/main/java/io/stamethyst/ui/settings/sections/DeviceDisplayGeometry.kt
+@@ -43,7 +43,7 @@ internal data class DeviceDisplayGeometry(
+ 
+     companion object {
+         @Suppress("DEPRECATION")
+-        fun read(activity: Activity, hostView: View): DeviceDisplayGeometry {
++        fun read(activity: Activity, hostView: View, portrait: Boolean = false): DeviceDisplayGeometry {
+             val display = if (Build.VERSION.SDK_INT >= 30) activity.display else activity.windowManager.defaultDisplay
+             val metrics = DisplayMetrics()
+             display?.getRealMetrics(metrics)
+@@ -61,7 +61,10 @@ internal data class DeviceDisplayGeometry(
+                 insets = hostView.rootWindowInsets
+             }
+             val rotation = display?.rotation ?: 0
+-            val target = DisplayGeometryRotation.canonicalLandscapeRotation(width, height, rotation)
++            val landscape = DisplayGeometryRotation.canonicalLandscapeRotation(width, height, rotation)
++            val naturalWidth = if (rotation % 2 == 0) width else height
++            val naturalHeight = if (rotation % 2 == 0) height else width
++            val target = if (!portrait) landscape else if (naturalWidth <= naturalHeight) 0 else 1
+             val turns = (target - rotation + 4) % 4
+             val cutout = when {
+                 Build.VERSION.SDK_INT >= 30 -> insets?.displayCutout
+diff --git a/app/src/main/java/io/stamethyst/ui/settings/sections/GameDisplayRegionSetting.kt b/app/src/main/java/io/stamethyst/ui/settings/sections/GameDisplayRegionSetting.kt
+index ebd4ef0..19e7c6a 100644
+--- a/app/src/main/java/io/stamethyst/ui/settings/sections/GameDisplayRegionSetting.kt
++++ b/app/src/main/java/io/stamethyst/ui/settings/sections/GameDisplayRegionSetting.kt
+@@ -78,6 +78,7 @@ import io.stamethyst.backend.render.DisplayRegionCorner
+ import io.stamethyst.backend.render.GameDisplayRegion
+ import io.stamethyst.backend.render.GameResolutionDraft
+ import io.stamethyst.backend.render.GameResolutionPreset
++import io.stamethyst.backend.render.VirtualResolutionMode
+ import io.stamethyst.backend.render.VirtualResolutionPolicy
+ import io.stamethyst.ui.LauncherAlertDialog
+ import io.stamethyst.ui.settings.common.SettingsActionListItem
+@@ -98,13 +99,17 @@ internal fun GameResolutionSetting(
+     val geometry = remember(activity, hostView, configuration, showEditor) {
+         activity?.let { DeviceDisplayGeometry.read(it, hostView) }
+     }
+-    val initial = geometry?.let {
++    val portraitGeometry = remember(activity, hostView, configuration, showEditor) {
++        activity?.let { DeviceDisplayGeometry.read(it, hostView, portrait = true) }
++    }
++    val selectedGeometry = if (uiState.virtualResolutionMode.isPortrait) portraitGeometry else geometry
++    val initial = selectedGeometry?.let {
+         GameResolutionDraft.fromSaved(
+             uiState.gameDisplayRegion ?: it.legacyRegion(uiState.avoidDisplayCutout, uiState.cropScreenBottom),
+             uiState.selectedRenderScale, uiState.virtualResolutionMode, it.width, it.height,
+         )
+     }
+-    val area = if (geometry != null && initial != null) initial.region.toPixels(geometry.width, geometry.height) else null
++    val area = if (selectedGeometry != null && initial != null) initial.region.toPixels(selectedGeometry.width, selectedGeometry.height) else null
+     SettingsActionListItem(
+         title = stringResource(R.string.settings_game_resolution_title),
+         supportingText = area?.let {
+@@ -113,11 +118,12 @@ internal fun GameResolutionSetting(
+         enabled = !uiState.busy && initial != null,
+         onClick = { showEditor = true },
+     )
+-    if (showEditor && geometry != null && initial != null) {
++    if (showEditor && geometry != null && portraitGeometry != null && initial != null) {
+         GameResolutionDialog(
+             initial, geometry, !uiState.busy,
+             onDismiss = { showEditor = false },
+             onSave = { onSave(it); showEditor = false },
++            portraitGeometry = portraitGeometry,
+         )
+     }
+ }
+@@ -129,13 +135,17 @@ internal fun GameResolutionDialog(
+     enabled: Boolean,
+     onDismiss: () -> Unit,
+     onSave: (GameResolutionDraft) -> Unit,
++    portraitGeometry: DeviceDisplayGeometry = DeviceDisplayGeometry(geometry.height, geometry.width),
+ ) {
++    var portrait by rememberSaveable { mutableStateOf(initial.mode.isPortrait) }
++    val mode = if (portrait) VirtualResolutionMode.PORTRAIT_FILL else VirtualResolutionMode.FULLSCREEN_FILL
++    val previewGeometry = if (portrait) portraitGeometry else geometry
+     var serializedDraft by rememberSaveable { mutableStateOf(initial.region.persistedValue()) }
+     var scale by rememberSaveable { mutableStateOf(initial.scale) }
+     var showSizeInputs by rememberSaveable { mutableStateOf(false) }
+     var chosenPreset by rememberSaveable { mutableStateOf<String?>(null) }
+     val region = GameDisplayRegion.fromPersistedValue(serializedDraft) ?: initial.region
+-    val (screenWidth, screenHeight) = geometry
++    val (screenWidth, screenHeight) = previewGeometry
+     val rect = region.toPixels(screenWidth, screenHeight)
+     var widthInput by rememberSaveable(screenWidth, screenHeight) { mutableStateOf(rect.width.toString()) }
+     var heightInput by rememberSaveable(screenWidth, screenHeight) { mutableStateOf(rect.height.toString()) }
+@@ -144,9 +154,10 @@ internal fun GameResolutionDialog(
+     val widthValid = widthInput.toIntOrNull()?.let { it in minWidth..screenWidth } == true
+     val heightValid = heightInput.toIntOrNull()?.let { it in minHeight..screenHeight } == true
+     val controlsEnabled = settingsControlEnabled(enabled)
++    val orientationValid = !portrait || rect.width < rect.height
+     val minimumScale = VirtualResolutionPolicy.minimumScale(rect.width, rect.height)
+-    val render = VirtualResolutionPolicy.resolve(rect.width, rect.height, scale)
+-    val draft = GameResolutionDraft(region, render.effectiveScale)
++    val render = VirtualResolutionPolicy.resolve(rect.width, rect.height, scale, mode)
++    val draft = GameResolutionDraft(region, render.effectiveScale.coerceAtMost(1f), mode)
+     val pixelSize = stringResource(R.string.settings_game_resolution_dimensions, render.width, render.height)
+     val renderSize = if (render.width.toLong() * rect.height == render.height.toLong() * rect.width) {
+         pixelSize
+@@ -154,8 +165,11 @@ internal fun GameResolutionDialog(
+         stringResource(R.string.settings_game_resolution_approximate, pixelSize)
+     }
+     val scaleLabel = stringResource(R.string.settings_game_resolution_percent, (render.effectiveScale * 100).roundToInt())
+-    val presets = remember(screenWidth, screenHeight) {
+-        GameResolutionPreset.entries.associateWith { it.resolve(screenWidth, screenHeight) }
++    val presets = remember(geometry, portraitGeometry) {
++        GameResolutionPreset.entries.associateWith {
++            val display = if (it == GameResolutionPreset.PORTRAIT) portraitGeometry else geometry
++            it.resolve(display.width, display.height)
++        }
+     }
+     val matchingPresets = GameResolutionPreset.entries.filter { presets[it] == draft }
+     val selectedPreset = matchingPresets.firstOrNull { it.name == chosenPreset } ?: matchingPresets.firstOrNull()
+@@ -188,7 +202,7 @@ internal fun GameResolutionDialog(
+         text = {
+             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                 GameDisplayRegionPreview(
+-                    region, geometry, controlsEnabled,
++                    region, previewGeometry, controlsEnabled,
+                     onRegionChange = ::updateFromPreview,
+                 )
+                 Text(
+@@ -197,7 +211,7 @@ internal fun GameResolutionDialog(
+                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                 )
+                 Text(
+-                    stringResource(R.string.settings_game_display_drag_hint),
++                    stringResource(if (orientationValid) R.string.settings_game_display_drag_hint else R.string.portrait_region_requires_taller_height),
+                     style = MaterialTheme.typography.bodySmall,
+                     modifier = Modifier.align(Alignment.CenterHorizontally),
+                 )
+@@ -247,9 +261,9 @@ internal fun GameResolutionDialog(
+                             },
+                         )
+                     }
+-                    if (geometry.cutoutBounds.isNotEmpty()) {
++                    if (previewGeometry.cutoutBounds.isNotEmpty()) {
+                         TextButton(enabled = controlsEnabled, onClick = {
+-                            updateFromPreview(geometry.legacyRegion(true, false))
++                            updateFromPreview(previewGeometry.legacyRegion(true, false))
+                         }) { Text(stringResource(R.string.settings_game_display_avoid_cutout)) }
+                     }
+                 }
+@@ -262,7 +276,7 @@ internal fun GameResolutionDialog(
+                     Text(renderSize, modifier = Modifier.testTag("game_render_resolution_value"))
+                 }
+                 Slider(
+-                    value = render.effectiveScale,
++                    value = draft.scale,
+                     onValueChange = { scale = it; chosenPreset = null },
+                     enabled = controlsEnabled && minimumScale < 1f,
+                     valueRange = minimumScale..1f,
+@@ -284,6 +298,7 @@ internal fun GameResolutionDialog(
+                                 selected = selectedPreset == preset && widthValid && heightValid,
+                                 onClick = {
+                                     if (draft != null) {
++                                        portrait = draft.mode.isPortrait
+                                         updateFromPreview(draft.region)
+                                         scale = draft.scale
+                                         chosenPreset = preset.name
+@@ -301,7 +316,7 @@ internal fun GameResolutionDialog(
+         },
+         confirmButton = {
+             TextButton(
+-                enabled = controlsEnabled && widthInput.toIntOrNull() == rect.width && heightInput.toIntOrNull() == rect.height,
++                enabled = controlsEnabled && orientationValid && widthInput.toIntOrNull() == rect.width && heightInput.toIntOrNull() == rect.height,
+                 onClick = { if (draft == initial && chosenPreset == null) onDismiss() else onSave(draft) },
+             ) { Text(stringResource(R.string.common_action_save)) }
+         },
+@@ -312,7 +327,8 @@ internal fun GameResolutionDialog(
+ }
+ 
+ private fun GameResolutionPreset.title(): Int = when (this) {
+-    GameResolutionPreset.FULLSCREEN -> R.string.settings_game_display_reset
++    GameResolutionPreset.FULLSCREEN -> R.string.fullscreen_fill_landscape_mode
++    GameResolutionPreset.PORTRAIT -> R.string.portrait_fill_mode
+     GameResolutionPreset.HD -> R.string.settings_virtual_resolution_mode_1080p
+     GameResolutionPreset.PERFORMANCE -> R.string.settings_virtual_resolution_mode_720p
+     GameResolutionPreset.CLASSIC -> R.string.settings_virtual_resolution_mode_4_3
+diff --git a/app/src/main/res/values-zh-rCN/portrait_preview.xml b/app/src/main/res/values-zh-rCN/portrait_preview.xml
+new file mode 100644
+index 0000000..9c43dbb
+--- /dev/null
++++ b/app/src/main/res/values-zh-rCN/portrait_preview.xml
+@@ -0,0 +1,15 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="portrait_preview_window_unavailable">未能取得安全的竖屏游戏窗口。请在竖屏全屏模式下重新打开游戏。</string>
++    <string name="portrait_fill_mode">铺满全屏（竖屏）</string>
++    <string name="portrait_fill_mode_description">画面铺满纵向窗口，控件避开系统安全区。需要 STS1 Portrait 0.3.0 或更高版本。</string>
++    <string name="custom_resolution_title">自定义分辨率</string>
++    <string name="custom_resolution_description">游戏使用输入的分辨率，画面按比例适应屏幕。竖屏需要 STS1 Portrait。</string>
++    <string name="custom_resolution_width">宽度</string>
++    <string name="custom_resolution_height">高度</string>
++    <string name="custom_resolution_pixels">像素</string>
++    <string name="custom_resolution_portrait">竖屏</string>
++    <string name="custom_resolution_landscape">横屏</string>
++    <string name="custom_resolution_invalid">请输入 800–4096 的宽度和 450–4096 的高度，总像素数最多为 8,388,608。</string>
++    <string name="fullscreen_fill_landscape_mode">铺满全屏（横屏）</string>
++</resources>
+diff --git a/app/src/main/res/values-zh-rCN/strings.xml b/app/src/main/res/values-zh-rCN/strings.xml
+index 16d39b7..e95f671 100644
+--- a/app/src/main/res/values-zh-rCN/strings.xml
++++ b/app/src/main/res/values-zh-rCN/strings.xml
+@@ -2502,7 +2502,7 @@
+     <string name="settings_mobile_hud_disabled">移动端 UI：关闭</string>
+     <string name="settings_mobile_hud_desc">控制是否启用原生移动端 UI。开启后，部分界面会更大，但某些模组可能显示异常，例如 Loadout 控制台可能会消失。</string>
+     <string name="settings_virtual_resolution_mode_title">长宽比 / 分辨率</string>
+-    <string name="settings_virtual_resolution_mode_fullscreen_fill">铺满全屏</string>
++    <string name="settings_virtual_resolution_mode_fullscreen_fill">铺满全屏（横屏）</string>
+     <string name="settings_virtual_resolution_mode_1080p">1080P</string>
+     <string name="settings_virtual_resolution_mode_720p">720P</string>
+     <string name="settings_virtual_resolution_mode_4_3">4:3</string>
+@@ -3418,4 +3418,5 @@
+     <string name="settings_mts_cache_card_library_desc">优点：更快进入主菜单。缺点：首次打开图鉴更慢。</string>
+     <string name="settings_mts_cache_splash_title">缩短启动标志动画</string>
+     <string name="settings_mts_cache_splash_desc">优点：缩短启动动画等待。缺点：标志展示时间更短。</string>
++    <string name="portrait_region_requires_taller_height">竖屏显示区域的高度必须大于宽度。</string>
+ </resources>
+diff --git a/app/src/main/res/values-zh-rTW/strings.xml b/app/src/main/res/values-zh-rTW/strings.xml
+index 4197d80..d57c571 100644
+--- a/app/src/main/res/values-zh-rTW/strings.xml
++++ b/app/src/main/res/values-zh-rTW/strings.xml
+@@ -2474,7 +2474,7 @@
+     <string name="settings_mobile_hud_disabled">移動端 UI：關閉</string>
+     <string name="settings_mobile_hud_desc">控制是否啟用原生移動端 UI。開啟後，部分介面會更大，但某些模組可能顯示異常，例如 Loadout 控制檯可能會消失。</string>
+     <string name="settings_virtual_resolution_mode_title">長寬比 / 解析度</string>
+-    <string name="settings_virtual_resolution_mode_fullscreen_fill">鋪滿全屏</string>
++    <string name="settings_virtual_resolution_mode_fullscreen_fill">鋪滿全屏（橫向）</string>
+     <string name="settings_virtual_resolution_mode_1080p">1080P</string>
+     <string name="settings_virtual_resolution_mode_720p">720P</string>
+     <string name="settings_virtual_resolution_mode_4_3">4:3</string>
+@@ -3418,4 +3418,6 @@
+     <string name="main_mod_workshop_jar_selection_message">%1$s 包含多個 jar 檔案。請選擇要匯入的檔案。</string>
+     <string name="main_mod_workshop_jar_selection_empty">請至少選擇一個 jar 檔案。</string>
+     <string name="main_mod_workshop_jar_selection_confirm">匯入所選</string>
++    <string name="fullscreen_fill_landscape_mode">鋪滿全螢幕（橫向）</string>
++    <string name="portrait_region_requires_taller_height">直向顯示區域的高度必須大於寬度。</string>
+ </resources>
+diff --git a/app/src/main/res/values/portrait_preview.xml b/app/src/main/res/values/portrait_preview.xml
+new file mode 100644
+index 0000000..0f6e46b
+--- /dev/null
++++ b/app/src/main/res/values/portrait_preview.xml
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="portrait_preview_window_unavailable">A safe portrait game window was unavailable. Reopen the game in fullscreen portrait mode.</string>
++    <string name="portrait_fill_mode">Fill full screen (portrait)</string>
++    <string name="portrait_fill_mode_description">Fill the portrait window and reserve safe areas for controls. Requires STS1 Portrait 0.3.0 or later.</string>
++    <string name="custom_resolution_title">Custom resolution</string>
++    <string name="custom_resolution_description">Use an exact game resolution and fit it to the display. Portrait requires STS1 Portrait.</string>
++    <string name="custom_resolution_width">Width</string>
++    <string name="custom_resolution_height">Height</string>
++    <string name="custom_resolution_pixels">pixels</string>
++    <string name="custom_resolution_dimensions">%1$d × %2$d</string>
++    <string name="custom_resolution_summary">%1$d × %2$d · %3$s</string>
++    <string name="custom_resolution_portrait">Portrait</string>
++    <string name="custom_resolution_landscape">Landscape</string>
++    <string name="custom_resolution_invalid">Enter a width of 800–4096 and a height of 450–4096. The total must not exceed 8,388,608 pixels.</string>
++    <string name="fullscreen_fill_landscape_mode">Fill full screen (landscape)</string>
++</resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 2d73f18..9110510 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -2205,7 +2205,7 @@ Patch rule: keep Ori full-resolution glow/bloom rendering, but replace the blur
+     <string name="settings_mobile_hud_disabled">Mobile UI: Disabled</string>
+     <string name="settings_mobile_hud_desc">Controls whether the native mobile UI is enabled. When on, parts of the UI become larger, but some mods may render incorrectly. For example, the Loadout console may disappear.</string>
+     <string name="settings_virtual_resolution_mode_title">Aspect ratio / resolution</string>
+-    <string name="settings_virtual_resolution_mode_fullscreen_fill">Fill full screen</string>
++    <string name="settings_virtual_resolution_mode_fullscreen_fill">Fill full screen (landscape)</string>
+     <string name="settings_virtual_resolution_mode_1080p">1080P</string>
+     <string name="settings_virtual_resolution_mode_720p">720P</string>
+     <string name="settings_virtual_resolution_mode_4_3">4:3</string>
+@@ -3420,4 +3420,5 @@ Patch rule: keep Ori full-resolution glow/bloom rendering, but replace the blur
+     <string name="settings_mts_cache_card_library_desc">Pros: reach the main menu faster. Cons: the library opens more slowly the first time.</string>
+     <string name="settings_mts_cache_splash_title">Shorten the startup logo animation</string>
+     <string name="settings_mts_cache_splash_desc">Pros: shorter wait for the startup animation. Cons: the logo is shown for less time.</string>
++    <string name="portrait_region_requires_taller_height">The portrait display area must be taller than it is wide.</string>
+ </resources>
+diff --git a/app/src/test/java/io/stamethyst/GameOrientationPolicyTest.kt b/app/src/test/java/io/stamethyst/GameOrientationPolicyTest.kt
+index 29741f5..f5362ec 100644
+--- a/app/src/test/java/io/stamethyst/GameOrientationPolicyTest.kt
++++ b/app/src/test/java/io/stamethyst/GameOrientationPolicyTest.kt
+@@ -7,6 +7,18 @@ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ 
+ class GameOrientationPolicyTest {
++    @Test
++    fun portraitGameRequestsPortraitForGameplayAndDefersInMultiWindow() {
++        assertEquals(
++            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
++            GameOrientationPolicy.resolveRequestedOrientation(false, portraitGame = true)
++        )
++        assertEquals(
++            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
++            GameOrientationPolicy.resolveRequestedOrientation(true, portraitGame = true)
++        )
++    }
++
+     @Test
+     fun godotBootStaysPortraitUntilEntryThenReturnsToLandscape() {
+         assertEquals(
+diff --git a/app/src/test/java/io/stamethyst/RenderSurfaceManagerPolicyTest.kt b/app/src/test/java/io/stamethyst/RenderSurfaceManagerPolicyTest.kt
+index ed7df57..097d816 100644
+--- a/app/src/test/java/io/stamethyst/RenderSurfaceManagerPolicyTest.kt
++++ b/app/src/test/java/io/stamethyst/RenderSurfaceManagerPolicyTest.kt
+@@ -10,6 +10,39 @@ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ 
+ class RenderSurfaceManagerPolicyTest {
++    @Test
++    fun centeredCustomPortraitSubtractsMarginsBeforeSendingSafeArea() {
++        val safe = RenderViewportInsets(left = 24, top = 100, right = 16, bottom = 80)
++        assertEquals("0.024,0.0,0.016,0.0", RenderSurfaceManager.formatPortraitViewportSafeArea(
++            safe, 1000, 2200, io.stamethyst.backend.render.VirtualResolution(1000, 2000, 1f)
++        ))
++    }
++
++    @Test
++    fun portraitFillPreservesTheWholeSurfaceAndSendsPerAxisSafeArea() {
++        val mode = VirtualResolutionMode.PORTRAIT_FILL
++        val canvas = VirtualResolutionPolicy.resolve(1000, 2000, 1f, mode)
++        assertEquals(1000, canvas.width)
++        assertEquals(2000, canvas.height)
++        assertEquals(
++            "0.02,0.04,0.03,0.05",
++            RenderSurfaceManager.formatPortraitSafeArea(RenderViewportInsets(20, 80, 30, 100), 1000, 2000)
++        )
++        assertEquals(VirtualResolutionMode.FULLSCREEN_FILL, mode.forGameLaunch(modded = false))
++    }
++    @Test
++    fun portraitGameFitsAnAsymmetricSafeAreaWithoutCountingInsetsTwice() {
++        val insets = RenderViewportInsets(left = 24, top = 96, right = 16, bottom = 64)
++        val canvas = RenderSurfaceManager.resolveViewportCanvasSize(1120, 2320, insets)
++        val resolution = VirtualResolutionPolicy.resolve(
++            canvas.width, canvas.height, 1f, VirtualResolutionMode.PORTRAIT_FILL
++        )
++        val layout = RenderSurfaceManager.resolveFixedVirtualViewportLayout(
++            1120, 2320, insets, resolution.width, resolution.height
++        )
++        assertEquals(RenderViewportLayout(1080, 2160, 24, 96, 16, 64), layout)
++    }
++
+     @Test
+     fun customFourCornerRegionMatchesPhysicalViewportWithoutAnExtraCrop() {
+         val bounds = io.stamethyst.backend.render.GameDisplayRegion(.05f, .1f, .95f, .9f)
+diff --git a/app/src/test/java/io/stamethyst/backend/render/GameResolutionDraftTest.kt b/app/src/test/java/io/stamethyst/backend/render/GameResolutionDraftTest.kt
+index 6dfff96..ad1f056 100644
+--- a/app/src/test/java/io/stamethyst/backend/render/GameResolutionDraftTest.kt
++++ b/app/src/test/java/io/stamethyst/backend/render/GameResolutionDraftTest.kt
+@@ -5,6 +5,16 @@ import org.junit.Assert.assertNull
+ import org.junit.Test
+ 
+ class GameResolutionDraftTest {
++    @Test fun portraitPresetAndSavedDraftKeepTheNativeOrientation() {
++        val portrait = GameResolutionPreset.PORTRAIT.resolve(1440, 3120)!!
++        assertEquals(VirtualResolutionMode.PORTRAIT_FILL, portrait.mode)
++        assertEquals(DisplayPixelRect(0, 0, 1440, 3120), portrait.region.toPixels(1440, 3120))
++        val saved = GameResolutionDraft.fromSaved(portrait.region, .75f, portrait.mode, 1440, 3120)
++        assertEquals(portrait.copy(scale = .75f), saved)
++        assertEquals(VirtualResolution(1080, 2340, .75f),
++            VirtualResolutionPolicy.resolve(1440, 3120, saved.scale, saved.mode))
++    }
++
+     @Test fun hdAndPerformanceUseTheSameDisplayRegion() {
+         val hd = GameResolutionPreset.HD.resolve(2400, 1080)!!
+         val fast = GameResolutionPreset.PERFORMANCE.resolve(2400, 1080)!!
+diff --git a/app/src/test/java/io/stamethyst/backend/render/VirtualResolutionPolicyTest.kt b/app/src/test/java/io/stamethyst/backend/render/VirtualResolutionPolicyTest.kt
+index 3fd9adb..f9dd826 100644
+--- a/app/src/test/java/io/stamethyst/backend/render/VirtualResolutionPolicyTest.kt
++++ b/app/src/test/java/io/stamethyst/backend/render/VirtualResolutionPolicyTest.kt
+@@ -1,9 +1,51 @@
+ package io.stamethyst.backend.render
+ 
+ import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
+ import org.junit.Test
+ 
+ class VirtualResolutionPolicyTest {
++    @Test
++    fun customResolutionUsesExactDimensionsAndDeterminesOrientation() {
++        val portrait = CustomGameResolution.validate(1080, 2340)!!
++        val landscape = CustomGameResolution.validate(1920, 1080)!!
++        val mode = VirtualResolutionMode.CUSTOM
++        assertEquals(VirtualResolution(1080, 2340, 1f), VirtualResolutionPolicy.resolve(800, 1800, .5f, mode, portrait))
++        assertEquals(VirtualResolution(1920, 1080, 1f), VirtualResolutionPolicy.resolve(2200, 1000, .5f, mode, landscape))
++        assertEquals(true, mode.usesPortrait(portrait))
++        assertEquals(false, mode.usesPortrait(landscape))
++        assertEquals(VirtualResolutionMode.FULLSCREEN_FILL, mode.forGameLaunch(false, portrait))
++        assertEquals(mode, mode.forGameLaunch(false, landscape))
++        assertEquals(mode, mode.forGameLaunch(true, portrait))
++    }
++
++    @Test
++    fun customResolutionRejectsInvalidAndExcessiveFramebufferDimensions() {
++        assertNull(CustomGameResolution.validate(null, 2000))
++        assertNull(CustomGameResolution.validate(799, 1200))
++        assertNull(CustomGameResolution.validate(1920, 449))
++        assertNull(CustomGameResolution.validate(4097, 1080))
++        assertNull(CustomGameResolution.validate(4096, 4096))
++        assertEquals(3840, CustomGameResolution.validate(3840, 2160)?.width)
++    }
++
++    @Test
++    fun portraitGamePreservesAspectRatioBelowDesktopMinimumWidth() {
++        val mode = VirtualResolutionMode.PORTRAIT_FILL
++        for ((height, expectedHeight) in listOf(1560 to 1733, 1600 to 1777)) {
++            val resolved = VirtualResolutionPolicy.resolve(720, height, 0.5f, mode)
++            assertEquals(800, resolved.width)
++            assertEquals(expectedHeight, resolved.height)
++        }
++        assertEquals(
++            VirtualResolution(800, 1600, 2.5f),
++            VirtualResolutionPolicy.resolve(320, 640, 0.5f, mode)
++        )
++        assertEquals(mode, VirtualResolutionMode.fromPersistedValue("portrait_preview"))
++        assertEquals(mode, mode.forGameLaunch(modded = true))
++        assertEquals(VirtualResolutionMode.FULLSCREEN_FILL, mode.forGameLaunch(modded = false))
++    }
++
+     @Test
+     fun fullscreenCanvas_normalizesPortraitPanelForLandscapeGame() {
+         assertEquals(
+diff --git a/app/src/test/java/io/stamethyst/input/StsInputCoordMapperTest.kt b/app/src/test/java/io/stamethyst/input/StsInputCoordMapperTest.kt
+index 13aac36..7dcc1d7 100644
+--- a/app/src/test/java/io/stamethyst/input/StsInputCoordMapperTest.kt
++++ b/app/src/test/java/io/stamethyst/input/StsInputCoordMapperTest.kt
+@@ -4,6 +4,16 @@ import org.junit.Assert.assertEquals
+ import org.junit.Test
+ 
+ class StsInputCoordMapperTest {
++    @Test
++    fun portraitContentMapsViewCornersInGlfwOrder() {
++        assertEquals(WindowCoords(0f, 0f), mapViewToWindowCoords(0f, 0f, 1080, 2160, 800, 1600))
++        assertEquals(
++            WindowCoords(799f, 1599f),
++            mapViewToWindowCoords(1079f, 2159f, 1080, 2160, 800, 1600)
++        )
++        assertEquals(1599f, glfwCursorYFromMappedViewY(1599f, 1600))
++    }
++
+     @Test
+     fun glfwCursorYKeepsTopLeftOrigin() {
+         assertEquals(0f, glfwCursorYFromMappedViewY(0f, 1080), 0.0001f)

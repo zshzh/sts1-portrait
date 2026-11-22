@@ -1,0 +1,1 @@
+dc6dfa8acf61c3f3444dea54170d4a3f4c394e5f4583069e5997ccaede015d6c  STS1Portrait-0.9.0-preview.42.jar
