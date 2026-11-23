@@ -4,7 +4,7 @@
 
 | 组件 | 版本 | 获取 |
 | --- | --- | --- |
-| STS1 Portrait | `0.9.0-preview.42` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.42/STS1Portrait-0.9.0-preview.42.jar) · [源码](./mod) |
+| STS1 Portrait | `0.9.0-preview.48` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.48/STS1Portrait-0.9.0-preview.48.jar) · [源码](./mod) |
 | Slay the Amethyst Plus | `1.6.7-plus.5` | [源码补丁与构建步骤](./launcher/README.md) |
 
 ## Android · Amethyst Plus
@@ -25,8 +25,10 @@ DroidDeck 需要先由其虚拟显示器提供纵向分辨率，再加载本 MOD
 ## 当前版本
 
 - 竖屏布局覆盖手牌、敌人、状态、药水、地图和奖励等界面。
-- `.42` 将故障机器人的充能球移到血条上方。槽位增加时，球栏向右展开并按可用宽度缩放。
-- `.41` 将永存者和两个随从分排，校准心脏事件站位，修正故障机器人充能球与空槽，调整竖屏主菜单。
+- 拉开同排敌人和底栏控件的距离。头像、药水栏和手牌留出侧边空间，单排和双排手牌均保留牌间距。
+- 拖动需要指定敌人的卡牌时，可以直接对准敌人贴图。
+- 故障机器人的充能球与空槽在血条上方左对齐，超过五槽时分两排。头像框与血条、充能球之间留有间隙。
+- 竖屏地图上的强化精英火焰随节点同步缩放。
 - 启动器基于紫水晶 `v1.6.7`。保留了显示区域调整和独立渲染倍率。启动器构建通过 62 项聚焦单元测试，MOD 在隔离桌面完成 1440×3120 和 1440×3200 的布局核验。手机上的完整安装和触控回归待补充。
 
 [构建 MOD](./mod/README.md) · [构建 Plus 和检查上游更新](./launcher/README.md)

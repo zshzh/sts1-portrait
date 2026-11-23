@@ -18,12 +18,14 @@ import com.megacrit.cardcrawl.ui.panels.DrawPilePanel;
 import java.util.ArrayList;
 
 public final class PortraitBattle {
-    private static final float CARD_WIDTH = 0.17f;
-    private static final float MIN_CARD_GAP = 0.006f;
-    private static final float COLUMN_PITCH = 0.1867f;
-    private static final float CARD_ROW_GAP = 0.012f;
-    private static final float HAND_HUD_GAP = 0.181f;
+    private static final float CARD_WIDTH = 0.164f;
+    private static final float MIN_CARD_GAP = 0.019f;
+    private static final float COLUMN_PITCH = 0.183f;
+    private static final float CARD_ROW_GAP = 0.023f;
+    private static final float HAND_HUD_GAP = 0.167f;
     private static final int CARDS_PER_ROW = 5;
+    // Match the apparent gaps between icons, including the two pile counters.
+    private static final float[] BOTTOM_CONTROL_X = { .090f, .236f, .500f, .770f, .909f };
     private static final ArrayList<AbstractMonster> laidOutMonsters = new ArrayList<>();
     private static AbstractRoom laidOutRoom;
     private static AbstractPlayer laidOutPlayer;
@@ -51,14 +53,14 @@ public final class PortraitBattle {
     }
 
     private static float fixedHandScale() {
-        float width = Math.min(PortraitViewport.referenceWidth() * CARD_WIDTH,
-                PortraitViewport.contentWidth() * (COLUMN_PITCH - MIN_CARD_GAP));
+        float width = Math.min(PortraitViewport.referenceCanvasWidth() * CARD_WIDTH,
+                Settings.WIDTH * (COLUMN_PITCH - MIN_CARD_GAP));
         return width / AbstractCard.IMG_WIDTH;
     }
 
     private static float handY(int row, float cardHeight) {
         float width = PortraitViewport.referenceWidth();
-        return hudY() + width * HAND_HUD_GAP + cardHeight * 0.5f
+        return hudY() + width * HAND_HUD_GAP - handDrop() + cardHeight * 0.5f
                 + (1 - row) * (cardHeight + width * CARD_ROW_GAP);
     }
 
@@ -79,14 +81,14 @@ public final class PortraitBattle {
         float cardHeight = AbstractCard.IMG_HEIGHT * handScale;
         // Larger hands from other mods still fit within the two-row area.
         int columns = handColumns(size);
-        float pitch = PortraitViewport.contentWidth() * COLUMN_PITCH * (CARDS_PER_ROW - 1) / (columns - 1);
+        float pitch = Settings.WIDTH * COLUMN_PITCH * (CARDS_PER_ROW - 1) / (columns - 1);
         AbstractPlayer player = AbstractDungeon.player;
         for (int index = 0; index < size; index++) {
             AbstractCard card = hand.group.get(index);
             if (!selecting && card == player.hoveredCard && (player.isDraggingCard || player.inSingleTargetMode)) {
                 continue;
             }
-            card.target_x = PortraitViewport.x(0.5f) + (index % columns - (columns - 1) * 0.5f) * pitch;
+            card.target_x = Settings.WIDTH * .5f + (index % columns - (columns - 1) * 0.5f) * pitch;
             card.target_y = handY(index / columns, cardHeight);
             card.targetAngle = 0.0f;
             card.targetDrawScale = handScale;
@@ -185,9 +187,9 @@ public final class PortraitBattle {
 
     private static void layoutMonsters(ArrayList<AbstractMonster> monsters) {
         float width = PortraitViewport.contentWidth();
-        float span = width * 0.9f;
+        float span = width * 0.92f;
         float unit = PortraitViewport.referenceWidth();
-        float gap = unit * 0.05f;
+        float gap = Math.min(width, unit) * 0.11f;
         float minEnemyWidth = Math.min(width * 0.28f, unit * (monsters.size() <= 2 ? 0.24f : 0.19f));
         boolean shortDrag = monsters.size() <= 2;
         int rowLimit = monsters.size() == 4 ? 2 : 3;
@@ -230,7 +232,7 @@ public final class PortraitBattle {
     }
 
     static float enemyBaseline() {
-        return battleHandTop() + PortraitViewport.referenceWidth() * .13f + PortraitViewport.contentWidth() * .096f;
+        return formationHandTop() + PortraitViewport.referenceWidth() * .13f + PortraitViewport.contentWidth() * .096f;
     }
 
     static void positionEnemy(AbstractMonster enemy, float centerX, float baseline, float unit) {
@@ -253,8 +255,8 @@ public final class PortraitBattle {
         }
         if (hudRevision != revision) {
             hudRevision = revision;
-            movePanel(menu.energyPanel, PortraitViewport.x(0.105f), hudY());
-            movePanel(menu.exhaustPanel, PortraitViewport.x(0.73f), hudY());
+            movePanel(menu.energyPanel, bottomControlX(0), hudY());
+            movePanel(menu.exhaustPanel, bottomControlX(4), hudY());
             float draw = PortraitViewport.x(0.015f);
             float discard = PortraitViewport.x(0.985f);
             float bottom = PortraitViewport.y(0);
@@ -295,16 +297,40 @@ public final class PortraitBattle {
         return handY(0, cardHeight) + cardHeight * .5f;
     }
 
-    static float playerBattleY() {
-        return battleHandTop() + PortraitViewport.referenceWidth() * .098f;
+    private static float formationHandTop() {
+        return battleHandTop() + handDrop();
     }
 
-    private static float hudY() {
+    static float playerFormationY() {
+        return formationHandTop() + PortraitViewport.referenceWidth() * .098f;
+    }
+
+    private static float handDrop() {
+        return Math.min(PortraitViewport.referenceWidth(), PortraitViewport.contentWidth()) * .09f;
+    }
+
+    static float playerHudDrop() {
+        return handDrop() + Math.min(PortraitViewport.referenceWidth(), PortraitViewport.contentWidth()) * .016f;
+    }
+
+    static float playerBattleY() {
+        return playerFormationY() - playerHudDrop();
+    }
+
+    static float hudY() {
         return PortraitViewport.y(0) + PortraitViewport.referenceWidth() * 0.076f;
     }
 
+    static float bottomControlX(int slot) {
+        return PortraitViewport.x(BOTTOM_CONTROL_X[slot]);
+    }
+
+    static float pileY() {
+        return hudY() - PortraitViewport.referenceWidth() * .011f;
+    }
+
     public static float endTurnX(float original) {
-        return PortraitViewport.active() ? PortraitViewport.x(0.5f) : original;
+        return PortraitViewport.active() ? bottomControlX(2) : original;
     }
 
     public static float endTurnY(float original) {

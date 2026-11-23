@@ -53,7 +53,7 @@ final class SlimeSplitLayout {
             if (!isSplitChild(monster)) return false;
         }
         float width = PortraitViewport.contentWidth();
-        float baseline = PortraitBattle.playerBattleY() + width * .128f;
+        float baseline = PortraitBattle.playerFormationY() + width * .128f;
         for (AbstractMonster monster : roster) {
             boolean acid = monster instanceof AcidSlime_L || monster instanceof AcidSlime_M;
             ArrayList<AbstractMonster> slots = acid ? acidSlots : spikeSlots;

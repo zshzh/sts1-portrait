@@ -80,8 +80,8 @@ public final class PortraitCombatHud {
     private static final float EXHAUST_SCALE = 2f;
     private static final float END_TURN_SCALE = 2f;
     private static final float PILE_SCALE = 1.29f * BOTTOM_ICON_SCALE;
-    private static final float DRAW_PILE_X = 0.255f;
-    private static final float DISCARD_PILE_X = 0.88f;
+    private static final int DRAW_PILE_SLOT = 1;
+    private static final int DISCARD_PILE_SLOT = 3;
 
     private static final float RELIC_SCALE = 1.82f;
     private static final int RELICS_PER_PAGE = 4;
@@ -288,8 +288,8 @@ public final class PortraitCombatHud {
         }
         if (!active() || AbstractDungeon.overlayMenu == null) return;
         prepareEnemyTargets();
-        placePile(AbstractDungeon.overlayMenu.combatDeckPanel, DrawPilePanel.class, DRAW_PILE_X);
-        placePile(AbstractDungeon.overlayMenu.discardPilePanel, DiscardPilePanel.class, DISCARD_PILE_X);
+        placePile(AbstractDungeon.overlayMenu.combatDeckPanel, DrawPilePanel.class, DRAW_PILE_SLOT);
+        placePile(AbstractDungeon.overlayMenu.discardPilePanel, DiscardPilePanel.class, DISCARD_PILE_SLOT);
         placeStatusPanel(AbstractDungeon.overlayMenu.energyPanel, EnergyPanel.class, "tipHitbox", BOTTOM_ICON_SCALE);
         if (!AbstractDungeon.player.exhaustPile.isEmpty()) {
             placeStatusPanel(AbstractDungeon.overlayMenu.exhaustPanel, ExhaustPanel.class, "hb", EXHAUST_SCALE);
@@ -352,23 +352,39 @@ public final class PortraitCombatHud {
             float targetWidth = Math.max(body.width, Math.min(limit, body.width * bodyScale(monster)));
             float targetHeight = Math.max(body.height, Math.min(
                     width * (!awakened && monsters.size() > 2 ? 0.162f : 0.34f), body.height * bodyScale(monster)));
-            float upper = body.y + targetHeight;
+            BodyTop bounds = IntentBounds.TOP.get(monster);
+            float upper = Math.max(body.y + targetHeight, visibleBodyTop(monster) + width * .012f);
             float lower = body.y;
             if (Sts2Preview.aiming() && Sts2Preview.canUseBand(monsters)) {
                 lower = Math.min(lower, Sts2Preview.bandY() - Sts2Preview.bandHeight() * .5f);
                 float bandWidth = Sts2Preview.bandWidth(monsters, monster);
                 targetWidth = SlimeSplitLayout.isSplitChild(monster) ? Math.max(targetWidth, bandWidth) : bandWidth;
             }
-            CombatTouchTargets.place(body, body.cX, (upper + lower) * .5f, targetWidth, upper - lower);
+            float left = body.cX - targetWidth * .5f;
+            float right = body.cX + targetWidth * .5f;
+            if (Float.isFinite(bounds.left) && Float.isFinite(bounds.right)) {
+                left = Math.min(left, monster.drawX + bounds.left);
+                right = Math.max(right, monster.drawX + bounds.right);
+            }
+            // Animated wings can cross a neighbor's sprite. Split the shared area at the midpoint.
+            for (AbstractMonster other : monsters) {
+                if (other == monster || other.isDeadOrEscaped()
+                        || Math.abs(other.hb.y - body.y) > width * .12f) continue;
+                float midpoint = (body.cX + other.hb.cX) * .5f;
+                if (other.hb.cX < body.cX) left = Math.max(left, midpoint);
+                else if (other.hb.cX > body.cX) right = Math.min(right, midpoint);
+            }
+            CombatTouchTargets.place(body, (left + right) * .5f, (upper + lower) * .5f,
+                    right - left, upper - lower);
             Hitbox intent = monster.intentHb;
             CombatTouchTargets.place(intent, intentX(monster), intentY(monster),
                     intent.width * INTENT_SCALE, intent.height * INTENT_SCALE);
         }
     }
 
-    private static void placePile(Object panel, Class<?> type, float x) {
+    private static void placePile(Object panel, Class<?> type, int slot) {
         Hitbox anchor = ReflectionHacks.getPrivate(panel, type, "hb");
-        placeControl( anchor, PortraitViewport.x(x), pileY(anchor), PILE_SCALE);
+        placeControl(anchor, PortraitBattle.bottomControlX(slot), PortraitBattle.pileY(), PILE_SCALE);
     }
 
     private static void placeStatusPanel(AbstractPanel panel, Class<?> type, String fieldName, float scale) {
@@ -694,6 +710,8 @@ public final class PortraitCombatHud {
     public static final class BodyTop {
         long sampleAfter;
         float offset = Float.NaN;
+        float left = Float.NaN;
+        float right = Float.NaN;
     }
 
     private static final Vector2 boundsOffset = new Vector2();
@@ -709,6 +727,11 @@ public final class PortraitCombatHud {
         if (Float.isFinite(boundsSize.y) && boundsSize.y > 0f) {
             float top = skeleton.getY() + (boundsOffset.y + boundsSize.y - skeleton.getY()) * scale;
             bounds.offset = top - monster.drawY;
+        }
+        if (Float.isFinite(boundsOffset.x) && Float.isFinite(boundsSize.x) && boundsSize.x > 0f) {
+            float left = skeleton.getX() + (boundsOffset.x - skeleton.getX()) * scale;
+            bounds.left = left - monster.drawX;
+            bounds.right = bounds.left + boundsSize.x * scale;
         }
     }
 
@@ -832,14 +855,16 @@ public final class PortraitCombatHud {
         return monster.hb.cX;
     }
 
-    private static float intentY(AbstractMonster monster) {
+    private static float visibleBodyTop(AbstractMonster monster) {
+        if (monster instanceof Hexaghost) return monster.drawY + 282f * Settings.scale;
         float offset = IntentBounds.TOP.get(monster).offset;
-        float bodyTop = Float.isNaN(offset)
+        return Float.isNaN(offset)
                 ? monster.hb.y + monster.hb.height * bodyScale(monster)
                 : monster.drawY + offset;
-        if (monster instanceof Hexaghost) {
-            bodyTop = monster.drawY + 282f * Settings.scale;
-        }
+    }
+
+    private static float intentY(AbstractMonster monster) {
+        float bodyTop = visibleBodyTop(monster);
         float bodyHeight = bodyTop - monster.hb.y;
         float gap = PortraitViewport.referenceWidth() * (bodyHeight < PortraitViewport.referenceWidth() * .18f
                 ? .008f : .018f);
@@ -885,7 +910,7 @@ public final class PortraitCombatHud {
         @SpirePrefixPatch
         public static void before(DrawPilePanel __instance, SpriteBatch batch) {
             if (active()) drawPile(batch, ReflectionHacks.getPrivate(__instance, DrawPilePanel.class, "hb"),
-                    DRAW_PILE_X);
+                    DRAW_PILE_SLOT);
         }
 
         @SpirePostfixPatch
@@ -899,7 +924,7 @@ public final class PortraitCombatHud {
         @SpirePrefixPatch
         public static void before(DiscardPilePanel __instance, SpriteBatch batch) {
             if (active()) drawPile(batch, ReflectionHacks.getPrivate(__instance, DiscardPilePanel.class, "hb"),
-                    DISCARD_PILE_X);
+                    DISCARD_PILE_SLOT);
         }
 
         @SpirePostfixPatch
@@ -965,8 +990,9 @@ public final class PortraitCombatHud {
         batch.draw(region, x, y, originX, originY, width, height, scaleX, scaleY, rotation);
     }
 
-    private static void drawPile(SpriteBatch batch, Hitbox anchor, float x) {
-        drawControl(batch, anchor, anchor.cX, anchor.cY, PortraitViewport.x(x), pileY(anchor),
+    private static void drawPile(SpriteBatch batch, Hitbox anchor, int slot) {
+        drawControl(batch, anchor, anchor.cX, anchor.cY,
+                PortraitBattle.bottomControlX(slot), PortraitBattle.pileY(),
                 PILE_SCALE);
     }
 
@@ -975,7 +1001,4 @@ public final class PortraitCombatHud {
         transform(batch, fromX, fromY, x, y, drawScale);
     }
 
-    private static float pileY(Hitbox anchor) {
-        return anchor.cY + PortraitViewport.referenceWidth() * 0.015f;
-    }
 }

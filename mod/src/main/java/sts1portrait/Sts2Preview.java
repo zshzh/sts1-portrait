@@ -24,7 +24,29 @@ import java.util.ArrayList;
 import java.util.WeakHashMap;
 
 public final class Sts2Preview {
-    private static final float POTION_RIGHT = .966f;
+    private static final float BATTLE_EDGE_GAP = .045f;
+    private static final float AVATAR_SIZE = .092f;
+    private static final float AVATAR_FRAME_RADIUS = .54f;
+
+    private static float avatarRadius() {
+        return PortraitViewport.contentWidth() * AVATAR_SIZE * AVATAR_FRAME_RADIUS;
+    }
+
+    private static float avatarX() {
+        return Settings.WIDTH * BATTLE_EDGE_GAP + avatarRadius();
+    }
+
+    static float avatarRight() {
+        return avatarX() + avatarRadius();
+    }
+
+    private static float potionRight() {
+        return Settings.WIDTH * (1f - BATTLE_EDGE_GAP);
+    }
+
+    static float potionLeft() {
+        return potionRight() - potionPitch() * AbstractDungeon.player.potions.size();
+    }
     private static final float POTION_SLOT_WIDTH = .087f;
     private static final float MAX_POTION_FRAME_WIDTH = .48f;
     private static final Matrix4 potionBase = new Matrix4();
@@ -109,7 +131,7 @@ public final class Sts2Preview {
 
     static float potionX(AbstractPotion potion) {
         ArrayList<AbstractPotion> potions = AbstractDungeon.player.potions;
-        return PortraitViewport.x(POTION_RIGHT)
+        return potionRight()
                 - potionPitch() * (potions.size() - .5f - potions.indexOf(potion));
     }
 
@@ -118,13 +140,12 @@ public final class Sts2Preview {
         if (potions.isEmpty()) return;
         float width = PortraitViewport.contentWidth();
         float y = PortraitBattle.playerBattleY();
-        float right = PortraitViewport.x(POTION_RIGHT);
-        float frameWidth = potionPitch() * potions.size();
+        float right = potionRight();
         float frameHeight = width * .082f;
         float border = width * .0032f;
         float corner = width * .013f;
         float scale = potionIconScale();
-        float left = right - frameWidth;
+        float left = potionLeft();
         float bottom = y - frameHeight * .5f;
         float color = batch.getPackedColor();
         batch.setColor(.23f, .34f, .40f, 1f);
@@ -252,11 +273,12 @@ public final class Sts2Preview {
                     break;
                 default: return SpireReturn.Continue();
             }
-            float size = PortraitViewport.contentWidth() * .092f;
-            float x = PortraitViewport.x(.079f), y = PortraitBattle.playerBattleY();
+            float size = PortraitViewport.contentWidth() * AVATAR_SIZE;
+            float x = avatarX(), y = PortraitBattle.playerBattleY();
             float color = batch.getPackedColor();
             batch.setColor(.087f, .105f, .128f, 1f);
-            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x - size * .54f, y - size * .54f, size * 1.08f, size * 1.08f);
+            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x - size * AVATAR_FRAME_RADIUS, y - size * AVATAR_FRAME_RADIUS,
+                    size * AVATAR_FRAME_RADIUS * 2f, size * AVATAR_FRAME_RADIUS * 2f);
             batch.setColor(red, green, blue, 1f);
             batch.draw(ImageMaster.WHITE_SQUARE_IMG, x - size * .51f, y - size * .51f, size * 1.02f, size * 1.02f);
             batch.setColor(Color.WHITE);

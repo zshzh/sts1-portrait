@@ -272,6 +272,7 @@ public final class PortraitMap {
     }
 
     @SpirePatch(clz = MapRoomNode.class, method = "render", paramtypez = {SpriteBatch.class})
+    @SpirePatch(clz = MapRoomNode.class, method = "renderEmeraldVfx", paramtypez = {SpriteBatch.class})
     public static class NodeDrawing {
         @SpireInstrumentPatch
         public static ExprEditor instrument() {
