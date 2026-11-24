@@ -16,6 +16,7 @@ import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
 import com.megacrit.cardcrawl.rooms.AbstractRoom;
 import com.megacrit.cardcrawl.scenes.AbstractScene;
 import com.megacrit.cardcrawl.ui.buttons.EndTurnButton;
+import com.megacrit.cardcrawl.vfx.scene.InteractableTorchEffect;
 import java.util.ArrayList;
 import javassist.CannotCompileException;
 import javassist.bytecode.CodeIterator;
@@ -56,6 +57,15 @@ public final class BattlePatches {
                     }
                 }
             };
+        }
+    }
+
+    @SpirePatch(clz = InteractableTorchEffect.class, method = "update", paramtypez = {})
+    @SpirePatch(clz = InteractableTorchEffect.class, method = "render", paramtypez = {SpriteBatch.class})
+    public static class HideMisalignedSceneTorches {
+        @SpirePrefixPatch
+        public static SpireReturn<Void> prefix() {
+            return PortraitViewport.active() ? SpireReturn.Return() : SpireReturn.Continue();
         }
     }
 

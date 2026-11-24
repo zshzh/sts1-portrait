@@ -61,9 +61,9 @@ public final class PortraitTouchControls {
     private static final Control GRID = new Control("grid-confirm", "Confirm card selection", "确认选牌",
             .76f, .085f, .44f, .105f);
     private static final Control CUSTOM = new Control("custom-embark", "Embark", "启程",
-            .76f, .085f, .44f, .105f);
+            .64f, .085f, .34f, .095f);
     private static final Control CUSTOM_SEED = new Control("custom-seed", "Set seed", "设定种子",
-            .35f, .085f, .29f, .095f);
+            .32f, .085f, .26f, .095f);
     private static final Control DAILY = new Control("daily-embark", "Start daily climb", "开始每日挑战",
             .76f, .085f, .44f, .105f);
     private static final Control MY_SCORE = new Control("my-score", "View my score", "查看我的分数",
@@ -72,7 +72,7 @@ public final class PortraitTouchControls {
             .76f, .085f, .44f, .105f);
     private static final Hitbox CREDITS_HITBOX = new Hitbox(-50f, -50f, 100f, 100f);
     private static final Control VIEW_UPGRADE = new Control("library-view-upgrade", "View upgrades", "查看升级",
-            .74f, .949f, .44f, .095f);
+            .65f, .949f, .42f, .090f);
     private static final Control PEEK = new Control("peek", "View battlefield", "查看战场",
             .088f, .80f, .124f, .124f);
     private static final Control BOWL = new Control("singing-bowl", "Singing Bowl", "唱歌碗",

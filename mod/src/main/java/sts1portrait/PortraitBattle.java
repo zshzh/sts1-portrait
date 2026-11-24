@@ -25,7 +25,8 @@ public final class PortraitBattle {
     private static final float HAND_HUD_GAP = 0.167f;
     private static final int CARDS_PER_ROW = 5;
     // Match the apparent gaps between icons, including the two pile counters.
-    private static final float[] BOTTOM_CONTROL_X = { .090f, .236f, .500f, .770f, .909f };
+    private static final float[] BOTTOM_CONTROL_X = { .095f, .240f, .500f, .765f, .905f };
+    private static final float DISCARD_NO_EXHAUST_X = .815f;
     private static final ArrayList<AbstractMonster> laidOutMonsters = new ArrayList<>();
     private static AbstractRoom laidOutRoom;
     private static AbstractPlayer laidOutPlayer;
@@ -60,7 +61,7 @@ public final class PortraitBattle {
 
     private static float handY(int row, float cardHeight) {
         float width = PortraitViewport.referenceWidth();
-        return hudY() + width * HAND_HUD_GAP - handDrop() + cardHeight * 0.5f
+        return handAnchorY() + width * HAND_HUD_GAP - handDrop() + cardHeight * 0.5f
                 + (1 - row) * (cardHeight + width * CARD_ROW_GAP);
     }
 
@@ -88,8 +89,12 @@ public final class PortraitBattle {
             if (!selecting && card == player.hoveredCard && (player.isDraggingCard || player.inSingleTargetMode)) {
                 continue;
             }
-            card.target_x = Settings.WIDTH * .5f + (index % columns - (columns - 1) * 0.5f) * pitch;
-            card.target_y = handY(index / columns, cardHeight);
+            int logicalRow = index / columns;
+            int rowCount = Math.min(columns, size - logicalRow * columns);
+            // Keep the first row of cards anchored on the bottom row; overflow cards (>5) fill the upper row.
+            int visualRow = 1 - logicalRow;
+            card.target_x = Settings.WIDTH * .5f + (index % columns - (rowCount - 1) * 0.5f) * pitch;
+            card.target_y = handY(visualRow, cardHeight);
             card.targetAngle = 0.0f;
             card.targetDrawScale = handScale;
         }
@@ -122,7 +127,10 @@ public final class PortraitBattle {
             return originalScale;
         }
         float cardHeight = AbstractCard.IMG_HEIGHT * fixedHandScale();
-        return Math.max(originalScale, (battleHandTop(cardHeight) + Settings.WIDTH * 0.02f) / originalMinimum);
+        float top = player.hand.size() <= CARDS_PER_ROW
+                ? handY(1, cardHeight) + cardHeight * 0.5f
+                : battleHandTop(cardHeight);
+        return Math.max(originalScale, (top + Settings.WIDTH * 0.02f) / originalMinimum);
     }
 
     static void layoutRoom(AbstractRoom room) {
@@ -167,7 +175,8 @@ public final class PortraitBattle {
         if (matchesRoster(roster)) {
             return;
         }
-        if (!AwakenedFormation.place(roster) && !SlimeSplitLayout.place(group, roster)) layoutMonsters(roster);
+        if (!AwakenedFormation.place(roster) && !SlimeSplitLayout.place(group, roster)
+                && !PortraitFinalAct.placeElitePair(roster)) layoutMonsters(roster);
         laidOutMonsters.clear();
         laidOutMonsters.addAll(roster);
         System.out.println("[STS1 Portrait] battle layout applied, enemies=" + laidOutMonsters.size());
@@ -232,7 +241,7 @@ public final class PortraitBattle {
     }
 
     static float enemyBaseline() {
-        return formationHandTop() + PortraitViewport.referenceWidth() * .13f + PortraitViewport.contentWidth() * .096f;
+        return formationHandTop() + PortraitViewport.referenceWidth() * .13f + PortraitViewport.contentWidth() * .226f;
     }
 
     static void positionEnemy(AbstractMonster enemy, float centerX, float baseline, float unit) {
@@ -317,11 +326,19 @@ public final class PortraitBattle {
         return playerFormationY() - playerHudDrop();
     }
 
-    static float hudY() {
+    private static float handAnchorY() {
         return PortraitViewport.y(0) + PortraitViewport.referenceWidth() * 0.076f;
     }
 
+    private static float hudY() {
+        float width = PortraitViewport.referenceWidth();
+        return Math.max(width * .065f, handAnchorY() - width * .036f);
+    }
+
     static float bottomControlX(int slot) {
+        if (slot == 3 && AbstractDungeon.player != null && AbstractDungeon.player.exhaustPile.isEmpty()) {
+            return PortraitViewport.x(DISCARD_NO_EXHAUST_X);
+        }
         return PortraitViewport.x(BOTTOM_CONTROL_X[slot]);
     }
 

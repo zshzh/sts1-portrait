@@ -36,8 +36,16 @@ public final class Sts2Preview {
         return Settings.WIDTH * BATTLE_EDGE_GAP + avatarRadius();
     }
 
+    static float avatarLeft() {
+        return avatarX() - avatarRadius();
+    }
+
     static float avatarRight() {
         return avatarX() + avatarRadius();
+    }
+
+    static float avatarFrameSize() {
+        return avatarRadius() * 2f;
     }
 
     private static float potionRight() {
@@ -68,10 +76,13 @@ public final class Sts2Preview {
     }
 
     public static float bandY() {
-        return PortraitBattle.battleHandTop() + PortraitViewport.referenceWidth() * .037f;
+        float width = PortraitViewport.contentWidth();
+        float aboveOrbs = PortraitOrbSlots.top() + width * .036f;
+        float aboveHud = PortraitBattle.playerBattleY() + width * .120f;
+        return Math.max(aboveOrbs, aboveHud);
     }
 
-    static float bandHeight() { return PortraitViewport.referenceWidth() * .022f; }
+    static float bandHeight() { return PortraitViewport.referenceWidth() * .034f; }
 
     static float bandWidth(ArrayList<AbstractMonster> monsters, AbstractMonster monster) {
         float width = PortraitViewport.contentWidth();
@@ -105,7 +116,7 @@ public final class Sts2Preview {
             batch.draw(ImageMaster.WHITE_SQUARE_IMG, x - w * .5f, y - h * .5f, w, h);
             com.badlogic.gdx.graphics.g2d.BitmapFont font = FontHelper.tipHeaderFont;
             float originalX = font.getData().scaleX, originalY = font.getData().scaleY;
-            float scale = PortraitViewport.contentWidth() * .015f / Math.max(1f, font.getCapHeight());
+            float scale = PortraitViewport.contentWidth() * .021f / Math.max(1f, font.getCapHeight());
             font.getData().setScale(originalX * scale, originalY * scale);
             try {
                 String release = Settings.language == Settings.GameLanguage.ZHS ? "松手攻击 · " : "Release · ";

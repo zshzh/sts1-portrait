@@ -238,7 +238,8 @@ public final class PortraitMap {
     }
 
     public static float bossBottom(float mapOffset) {
-        return 180f * Settings.scale + (AbstractDungeon.map.size() - 0.55f) * floorSpacing() - mapOffset;
+        float bossFloor = AbstractDungeon.map.size() - ("TheEnding".equals(AbstractDungeon.id) ? 1.73f : .55f);
+        return 180f * Settings.scale + bossFloor * floorSpacing() - mapOffset;
     }
 
     @SpirePatch(clz = DungeonMap.class, method = "update", paramtypez = {})

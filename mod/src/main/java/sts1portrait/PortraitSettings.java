@@ -302,7 +302,7 @@ public final class PortraitSettings {
                     widgetScale = Math.min(width * 0.86f / nativeWidth, height * 0.85f / nativeRow);
                     widgetScale = Math.min(widgetScale, PortraitViewport.contentHeight() * 0.49f / (rowCount * nativeRow));
                 } else {
-                    widgetScale = Math.min(width * 0.42f / nativeWidth, height * 0.76f / nativeRow);
+                    widgetScale = Math.min(width * 0.42f / nativeWidth, height * 0.56f / nativeRow);
                 }
                 menuWidth = nativeWidth * widgetScale;
                 menuHeight = rowCount * nativeRow * widgetScale;
@@ -317,7 +317,8 @@ public final class PortraitSettings {
         void draw(SpriteBatch batch, Color background, boolean centered) {
             PortraitDrawing.rectangle(batch, x - width * 0.5f, y - height * 0.5f, width, height, background);
             boolean hasValue = widget instanceof Slider || widget instanceof DropdownMenu || widget instanceof String;
-            float labelWidth = hasValue ? width * 0.49f : width * 0.83f;
+            float labelWidth = hasValue ? width * 0.47f
+                    : widget instanceof ToggleButton ? width * 0.74f : width * 0.83f;
             label(batch, text, centered ? x : x - width * 0.46f, y, labelWidth, height * 0.30f, centered);
             if (widget instanceof ToggleButton) {
                 checkmark(batch, x + width * 0.38f, y, height * 0.39f, ((ToggleButton) widget).enabled);

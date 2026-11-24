@@ -42,8 +42,13 @@ public final class PortraitRichText {
     public PortraitRichText() { this(false); }
     PortraitRichText(boolean eventSpacing) { this.eventSpacing = eventSpacing; }
 
+    private static final Pattern BETWEEN_CN_COLOR = Pattern.compile(
+            "([\\p{IsHan}，。！？、；：）])(" + COLOR_TAGS + ")[ \\t\\u3000]+(" + COLOR_TAGS
+                    + ")(?=[\\p{IsHan}，。！？、；：）])");
+
     static String tightenEventNumbers(String text) {
-        return AFTER_CN_NUMBER.matcher(BEFORE_CN_NUMBER.matcher(text).replaceAll("$1$2$3")).replaceAll("$1$2$3");
+        String s = AFTER_CN_NUMBER.matcher(BEFORE_CN_NUMBER.matcher(text).replaceAll("$1$2$3")).replaceAll("$1$2$3");
+        return BETWEEN_CN_COLOR.matcher(s).replaceAll("$1$2$3");
     }
 
     private String source;
@@ -65,6 +70,16 @@ public final class PortraitRichText {
 
     void draw(SpriteBatch batch, BitmapFont font, String text, Color color, float x, float y,
             float width, float height, float lineHeight, int alignment, AbstractPlayer character) {
+        draw(batch, font, text, color, x, y, width, height, lineHeight, alignment, character, false);
+    }
+
+    void drawTop(SpriteBatch batch, BitmapFont font, String text, Color color, float x, float topY,
+            float width, float height, float lineHeight, int alignment, AbstractPlayer character) {
+        draw(batch, font, text, color, x, topY, width, height, lineHeight, alignment, character, true);
+    }
+
+    private void draw(SpriteBatch batch, BitmapFont font, String text, Color color, float x, float y,
+            float width, float height, float lineHeight, int alignment, AbstractPlayer character, boolean topAligned) {
         if (text == null || text.isEmpty()) return;
         if (!text.equals(source)) {
             source = text;
@@ -92,7 +107,7 @@ public final class PortraitRichText {
                 layout.setText(font, formatted, color, width, Align.left, true);
             }
             if (alignment == Align.center) centerLines(width, data.scaleX);
-            float top = y + layout.height * .5f;
+            float top = topAligned ? y : y + layout.height * .5f;
             font.draw(batch, layout, x, top);
             if (icons != 0) drawIcons(batch, font, x, top, character);
         } finally {
@@ -194,7 +209,13 @@ public final class PortraitRichText {
             String color = tokens.group(2);
             String tag = tokens.group(4);
             if (control != null) {
-                output.append("NL".equals(control) ? "\n" : "    ");
+                if ("NL".equals(control)) {
+                    output.append('\n');
+                    end = tokens.end();
+                    while (end < text.length() && text.charAt(end) == ' ') end++;
+                    continue;
+                }
+                output.append("    ");
             } else if (color != null) {
                 output.append("[#").append(colorCode(color.charAt(0))).append(']');
                 if (!appendIcon(output, tokens.group(3))) literal(output, text, tokens.start(3), tokens.end(3));

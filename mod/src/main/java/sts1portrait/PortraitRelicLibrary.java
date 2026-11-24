@@ -20,7 +20,7 @@ public final class PortraitRelicLibrary {
 
     public static void beginIcon(SpriteBatch batch, AbstractRelic relic) {
         original.set(batch.getTransformMatrix());
-        float scale = 1.55f;
+        float scale = 1.45f;
         moved.set(original).translate(relic.currentX * (1 - scale), relic.currentY * (1 - scale), 0)
                 .scale(scale, scale, 1);
         batch.setTransformMatrix(moved);
@@ -32,8 +32,8 @@ public final class PortraitRelicLibrary {
 
     public static void updateRelic(AbstractRelic relic) {
         if (PortraitScreens.enabled()) {
-            relic.hb.width = PortraitViewport.contentWidth() * 0.083f;
-            relic.hb.height = com.megacrit.cardcrawl.core.Settings.scale * 116f;
+            relic.hb.width = PortraitViewport.contentWidth() * 0.076f;
+            relic.hb.height = com.megacrit.cardcrawl.core.Settings.scale * 110f;
             relic.hb.move(relic.currentX, relic.currentY);
         }
         relic.update();
@@ -51,7 +51,7 @@ public final class PortraitRelicLibrary {
                 public void edit(FieldAccess field) throws CannotCompileException {
                     if (field.isWriter() && "currentX".equals(field.getFieldName())) {
                         field.replace("{ $proceed(sts1portrait.PortraitScreens.enabled()"
-                                + " ? sts1portrait.PortraitViewport.x(0.095f + col * 0.089f) : $1); }");
+                                + " ? sts1portrait.PortraitViewport.x(0.075f + col * 0.082f) : $1); }");
                     } else if (field.isReader() && "SPACE".equals(field.getFieldName())) {
                         field.replace("{ $_ = $proceed() * (sts1portrait.PortraitScreens.enabled() ? 1.55f : 1f); }");
                     } else if (field.isWriter() && "scrollUpperBound".equals(field.getFieldName())) {

@@ -91,8 +91,13 @@ public final class PortraitOrbSlots {
     private static void place(AbstractPlayer player, AbstractOrb orb, int index, int count) {
         float diameter = diameter(player, count);
         float pitch = diameter + columnGap();
-        orb.tX = PortraitCreatureHealth.playerBarLeft(player) + diameter * .5f + (index % ORBS_PER_ROW) * pitch;
-        orb.tY = bottom() + diameter * .5f + (index / ORBS_PER_ROW) * (diameter + rowGap());
+        int row = index / ORBS_PER_ROW;
+        int rowStart = row * ORBS_PER_ROW;
+        int rowCount = Math.min(ORBS_PER_ROW, Math.max(1, count - rowStart));
+        // Vanilla stores the oldest (next-to-evoke) orb at index 0; place newest on the left and shift older orbs right.
+        int col = rowCount - 1 - (index - rowStart);
+        orb.tX = PortraitCreatureHealth.playerBarLeft(player) + diameter * .5f + col * pitch;
+        orb.tY = bottom() + diameter * .5f + row * (diameter + rowGap());
         orb.hb.resize(diameter, diameter);
         orb.hb.move(orb.tX, orb.tY);
     }

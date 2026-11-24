@@ -4,7 +4,7 @@
 
 | 组件 | 版本 | 获取 |
 | --- | --- | --- |
-| STS1 Portrait | `0.9.0-preview.48` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.48/STS1Portrait-0.9.0-preview.48.jar) · [源码](./mod) |
+| STS1 Portrait | `0.9.0-preview.57` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.57/STS1Portrait-0.9.0-preview.57.jar) · [源码](./mod) |
 | Slay the Amethyst Plus | `1.6.7-plus.5` | [源码补丁与构建步骤](./launcher/README.md) |
 
 ## Android · Amethyst Plus
@@ -23,6 +23,8 @@
 DroidDeck 需要先由其虚拟显示器提供纵向分辨率，再加载本 MOD。DroidDeck 真机兼容性待验证。
 
 ## 当前版本
+
+- 重做竖屏主菜单和角色选择。双排手牌先填下排，修正充能球顺序、第一幕火把特效和第四幕敌人贴图。
 
 - 竖屏布局覆盖手牌、敌人、状态、药水、地图和奖励等界面。
 - 拉开同排敌人和底栏控件的距离。头像、药水栏和手牌留出侧边空间，单排和双排手牌均保留牌间距。

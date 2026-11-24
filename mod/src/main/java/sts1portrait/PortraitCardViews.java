@@ -70,7 +70,7 @@ public final class PortraitCardViews {
     }
 
     public static float libraryTop(float original) {
-        return PortraitScreens.enabled() ? PortraitViewport.y(.80f) + Settings.DEFAULT_SCROLL_LIMIT : original;
+        return PortraitScreens.enabled() ? PortraitViewport.y(.745f) + Settings.DEFAULT_SCROLL_LIMIT : original;
     }
 
     @SpirePatch(clz = CardLibraryScreen.class, method = SpirePatch.CLASS)
@@ -218,7 +218,8 @@ public final class PortraitCardViews {
                 public void edit(MethodCall call) throws CannotCompileException {
                     if (AbstractCard.class.getName().equals(call.getClassName()) && "update".equals(call.getMethodName())) {
                         call.replace("{ sts1portrait.PortraitCardViews.sizeCard($0); $proceed($$); }");
-                    } else if (MasterDeckSortHeader.class.getName().equals(call.getClassName())
+                    } else if ((MasterDeckSortHeader.class.getName().equals(call.getClassName())
+                            || "com.megacrit.cardcrawl.screens.compendium.CardLibSortHeader".equals(call.getClassName()))
                             && "updateScrollPosition".equals(call.getMethodName())) {
                         call.replace("{ $proceed(sts1portrait.PortraitScreens.enabled() ? $1"
                                 + " + sts1portrait.PortraitViewport.contentWidth() * 0.058f : $1); }");

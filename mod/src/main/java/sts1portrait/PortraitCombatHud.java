@@ -39,6 +39,7 @@ import com.megacrit.cardcrawl.helpers.ModHelper;
 import com.megacrit.cardcrawl.helpers.TipHelper;
 import com.megacrit.cardcrawl.helpers.input.InputHelper;
 import com.megacrit.cardcrawl.monsters.AbstractMonster;
+import com.megacrit.cardcrawl.monsters.ending.CorruptHeart;
 import com.megacrit.cardcrawl.monsters.exordium.Hexaghost;
 import com.megacrit.cardcrawl.monsters.exordium.HexaghostBody;
 import com.megacrit.cardcrawl.ui.panels.TopPanel;
@@ -77,6 +78,7 @@ public final class PortraitCombatHud {
     private static final float SETTINGS_X = 0.94f;
     private static final float INTENT_SCALE = 1.46f;
     private static final float BOTTOM_ICON_SCALE = 1.5f;
+    private static final float ENERGY_SCALE = 1.88f;
     private static final float EXHAUST_SCALE = 2f;
     private static final float END_TURN_SCALE = 2f;
     private static final float PILE_SCALE = 1.29f * BOTTOM_ICON_SCALE;
@@ -287,10 +289,18 @@ public final class PortraitCombatHud {
             }
         }
         if (!active() || AbstractDungeon.overlayMenu == null) return;
+        if (Sts2Preview.compact()) {
+            float playerLeft = Sts2Preview.avatarLeft();
+            float playerRight = PortraitCreatureHealth.playerBarRight(AbstractDungeon.player);
+            float hitWidth = Math.max(Sts2Preview.avatarFrameSize(), playerRight - playerLeft);
+            float hitHeight = Sts2Preview.avatarFrameSize() * 1.18f;
+            CombatTouchTargets.place(AbstractDungeon.player.hb,
+                    (playerLeft + playerRight) * .5f, PortraitBattle.playerBattleY(), hitWidth, hitHeight);
+        }
         prepareEnemyTargets();
         placePile(AbstractDungeon.overlayMenu.combatDeckPanel, DrawPilePanel.class, DRAW_PILE_SLOT);
         placePile(AbstractDungeon.overlayMenu.discardPilePanel, DiscardPilePanel.class, DISCARD_PILE_SLOT);
-        placeStatusPanel(AbstractDungeon.overlayMenu.energyPanel, EnergyPanel.class, "tipHitbox", BOTTOM_ICON_SCALE);
+        placeStatusPanel(AbstractDungeon.overlayMenu.energyPanel, EnergyPanel.class, "tipHitbox", ENERGY_SCALE);
         if (!AbstractDungeon.player.exhaustPile.isEmpty()) {
             placeStatusPanel(AbstractDungeon.overlayMenu.exhaustPanel, ExhaustPanel.class, "hb", EXHAUST_SCALE);
         }
@@ -699,7 +709,7 @@ public final class PortraitCombatHud {
         if (creature instanceof AbstractPlayer) return 1.43f;
         float previewScale = Math.max(1.12f, Math.min(1.65f, 1.08f + 58f / Math.max(1f, creature.hb.height)));
         return SlimeSplitLayout.fitBody(creature, previewScale * ENEMY_SCALE)
-                * AwakenedFormation.bodyScale(creature);
+                * AwakenedFormation.bodyScale(creature) * PortraitFinalAct.bodyScale(creature);
     }
 
     @SpirePatch(clz = AbstractMonster.class, method = SpirePatch.CLASS)
@@ -762,6 +772,14 @@ public final class PortraitCombatHud {
         float x = skeleton.getX();
         float y = skeleton.getY();
         float scale = bodyScale(creature);
+        if (creature instanceof CorruptHeart) {
+            skeleton.getBounds(boundsOffset, boundsSize);
+            float reach = boundsOffset.y + boundsSize.y - y;
+            if (Float.isFinite(reach) && reach > 0f) {
+                float room = panelBottom() - y - PortraitViewport.referenceWidth() * .045f;
+                scale = Math.min(scale, Math.max(.10f, room / reach));
+            }
+        }
         if (creature instanceof AbstractMonster) captureBodyTop((AbstractMonster) creature, skeleton, scale);
         poseOriginal.set(batch.getTransformMatrix());
         poseScaled.set(poseOriginal).translate(x, y, 0).scale(scale, scale, 1f).translate(-x, -y, 0);
@@ -950,7 +968,7 @@ public final class PortraitCombatHud {
                 boolean energy = panel instanceof EnergyPanel;
                 Hitbox anchor = energy ? ReflectionHacks.getPrivate(panel, EnergyPanel.class, "tipHitbox")
                         : ReflectionHacks.getPrivate(panel, ExhaustPanel.class, "hb");
-                float scale = energy ? BOTTOM_ICON_SCALE : EXHAUST_SCALE;
+                float scale = energy ? ENERGY_SCALE : EXHAUST_SCALE;
                 drawControl(batch, anchor,
                         panel.current_x, panel.current_y, panel.current_x, panel.current_y,
                         scale);

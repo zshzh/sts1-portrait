@@ -62,7 +62,7 @@ public final class PortraitPotionLibrary {
                     String name = field.getFieldName();
                     if (field.isWriter() && "posX".equals(name)) {
                         field.replace("{ $proceed(sts1portrait.PortraitScreens.enabled()"
-                                + " ? sts1portrait.PortraitViewport.x(0.11f + col * 0.11f) : $1); }");
+                                + " ? sts1portrait.PortraitViewport.x(0.095f + col * 0.102f) : $1); }");
                     } else if (field.isReader() && "SPACE".equals(name)) {
                         field.replace("{ $_ = sts1portrait.PortraitScreens.enabled()"
                                 + " ? sts1portrait.PortraitViewport.contentWidth() * 0.085f : $proceed(); }");
