@@ -623,7 +623,7 @@ public final class PortraitUi {
             float padRight = area.width * 0.028f;
             // Uniform crisp font size across all options so 1-line and 2-line choices match visually with generous padding.
             float targetCap = Math.min(area.height * 0.224f, PortraitViewport.contentWidth() * 0.0248f);
-            OptionText.text.get(option).draw(batch, FontHelper.buttonLabelFont, option.msg,
+            OptionText.text.get(option).draw(batch, PortraitFonts.header(), option.msg,
                     disabled ? DISABLED_OPTION_TEXT : Settings.CREAM_COLOR,
                     left + padLeft, area.cY, area.width - padLeft - padRight, area.height * 0.72f,
                     targetCap, singleChoice ? Align.center : Align.left);

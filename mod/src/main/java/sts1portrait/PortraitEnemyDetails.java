@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.utils.Align;
 import com.evacipated.cardcrawl.modthespire.lib.SpireInstrumentPatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
@@ -25,6 +26,7 @@ import javassist.expr.MethodCall;
 public final class PortraitEnemyDetails {
     private static final Matrix4 originalTransform = new Matrix4();
     private static final Matrix4 fittedTransform = new Matrix4();
+    private static final ArrayList<PortraitRichText> tipBodies = new ArrayList<>();
     private static AbstractCreature queuedCreature;
     private static ArrayList<PowerTip> queuedTips;
 
@@ -65,7 +67,6 @@ public final class PortraitEnemyDetails {
     public static class DrawCreatureDetails {
         @SpirePostfixPatch
         public static void postfix(SpriteBatch batch) {
-            AbstractPlayer player = AbstractDungeon.player;
             AbstractCreature creature = queuedCreature;
             ArrayList<PowerTip> tips = queuedTips;
             queuedCreature = null;
@@ -77,97 +78,146 @@ public final class PortraitEnemyDetails {
     private static void draw(SpriteBatch batch, AbstractCreature creature, ArrayList<PowerTip> tips) {
         boolean player = creature instanceof AbstractPlayer;
         float width = PortraitViewport.contentWidth();
-        float x = PortraitViewport.x(0.12f);
-        float panelWidth = width * 0.76f;
-        float pad = width * 0.023f;
-        float textWidth = panelWidth - 2f * pad;
-        float rowGap = width * 0.012f;
-        float titleHeight = width * 0.050f;
-        float labelHeight = width * 0.036f;
-        BitmapFont heading = FontHelper.tipHeaderFont;
-        BitmapFont body = FontHelper.tipBodyFont;
+        float panelWidth = width * 0.78f;
+        float x = PortraitViewport.x(0.5f) - panelWidth * 0.5f;
+        float padX = width * 0.032f;
+        float padTop = width * 0.030f;
+        float padBot = width * 0.030f;
+        float textWidth = panelWidth - 2f * padX;
+
+        float titleCap = width * 0.030f;
+        float labelCap = width * 0.0235f;
+        float bodyCap = width * 0.0235f;
+        float titleToDivider = titleCap * 1.65f;
+        float dividerToBody = width * 0.022f;
+        float labelToBody = labelCap * 1.50f;
+        float tipGap = width * 0.026f;
+
+        BitmapFont heading = PortraitFonts.header();
+        BitmapFont body = PortraitFonts.body();
         float headingX = heading.getData().scaleX;
         float headingY = heading.getData().scaleY;
-        float bodyX = body.getData().scaleX;
-        float bodyY = body.getData().scaleY;
+        boolean headingMarkup = heading.getData().markupEnabled;
         float packed = batch.getPackedColor();
-        float hFactor = width * 0.030f / Math.max(1f, heading.getCapHeight());
-        float bFactor = width * 0.025f / Math.max(1f, body.getCapHeight());
-        heading.getData().setScale(headingX * hFactor, headingY * hFactor);
-        body.getData().setScale(bodyX * bFactor, bodyY * bFactor);
+
+        ArrayList<PowerTip> validTips = new ArrayList<>();
+        if (tips != null) {
+            for (PowerTip tip : tips) {
+                if (tip != null) validTips.add(tip);
+            }
+        }
+        while (tipBodies.size() < validTips.size()) {
+            tipBodies.add(new PortraitRichText(true));
+        }
+
+        float[] bodyHeights = new float[validTips.size()];
+        float contentHeight = titleToDivider + dividerToBody;
+        for (int i = 0; i < validTips.size(); i++) {
+            PowerTip tip = validTips.get(i);
+            float bh = tip.body != null && !tip.body.isEmpty()
+                    ? tipBodies.get(i).measureHeight(body, tip.body, textWidth, bodyCap)
+                    : 0f;
+            bodyHeights[i] = bh;
+            if (i > 0) contentHeight += tipGap;
+            if (tip.header != null && !tip.header.isEmpty()) contentHeight += labelToBody;
+            contentHeight += bh;
+        }
+        float panelHeight = padTop + contentHeight + padBot;
+
         boolean fitted = false;
         try {
-            float line = body.getLineHeight() * 1.03f;
-            float panelHeight = 2f * pad + titleHeight;
-            for (PowerTip tip : tips) {
-                if (tip != null) panelHeight += labelHeight + line + paragraph(body, tip, textWidth, line) + rowGap;
-            }
             float preferredTop = creature.healthHb.y - width * 0.027f;
             if (player) {
                 preferredTop = PortraitViewport.y(0.72f);
             } else {
                 for (AbstractMonster enemy : AbstractDungeon.getMonsters().monsters) {
-                    if (!enemy.isDeadOrEscaped()) preferredTop = Math.min(preferredTop, enemy.healthHb.y - width * 0.027f);
+                    if (!enemy.isDeadOrEscaped()) {
+                        preferredTop = Math.min(preferredTop, enemy.healthHb.y - width * 0.027f);
+                    }
                 }
             }
             float upperLimit = PortraitViewport.y(0.86f);
             float lowerLimit = PortraitViewport.y(player ? 0.43f : 0.40f);
-            float fit = Math.min(1f, (upperLimit - lowerLimit) / panelHeight);
+            float fit = Math.min(1f, (upperLimit - lowerLimit) / Math.max(1f, panelHeight));
             float top = Math.min(upperLimit, Math.max(preferredTop, lowerLimit + panelHeight * fit));
             float bottom = top - panelHeight;
 
             float center = x + panelWidth * 0.5f;
-            float scale = fit;
-            if (scale != 1f) {
+            if (fit != 1f) {
                 originalTransform.set(batch.getTransformMatrix());
                 fittedTransform.set(originalTransform).translate(center, top, 0f)
-                        .scale(scale, scale, 1f).translate(-center, -top, 0f);
+                        .scale(fit, fit, 1f).translate(-center, -top, 0f);
                 batch.setTransformMatrix(fittedTransform);
                 fitted = true;
             }
-            batch.setColor(0f, 0f, 0f, 0.46f);
-            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x + 4, bottom - 5, panelWidth, panelHeight);
-            batch.setColor(0.29f, 0.34f, 0.36f, 1f);
-            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x, bottom, panelWidth, panelHeight);
-            batch.setColor(0.084f, 0.105f, 0.13f, 1f);
-            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x + 2, bottom + 2, panelWidth - 4, panelHeight - 4);
-            batch.setColor(0.72f, 0.56f, 0.32f, 1f);
-            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x, top - 2, panelWidth, 2);
+
+            float cut = Math.min(panelWidth * 0.022f, panelHeight * 0.075f);
+            float border = Math.max(2f, panelWidth * 0.0026f);
+            batch.setColor(0f, 0f, 0f, 0.48f);
+            PortraitUi.drawCutCorner(batch, x + 5f, bottom - 6f, x + panelWidth + 5f, top - 6f, cut);
+            batch.setColor(0.78f, 0.64f, 0.37f, 0.80f);
+            PortraitUi.drawCutCorner(batch, x, bottom, x + panelWidth, top, cut);
+            batch.setColor(0.060f, 0.088f, 0.120f, 0.96f);
+            PortraitUi.drawCutCorner(batch, x + border, bottom + border, x + panelWidth - border, top - border,
+                    Math.max(1f, cut - border * 0.6f));
+            batch.setColor(0.96f, 0.82f, 0.48f, 0.24f);
+            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x + cut, top - border * 2f,
+                    panelWidth - cut * 2f, Math.max(2f, border * 0.8f));
+
+            // Title
+            float cursorY = top - padTop;
             String title = player ? ((AbstractPlayer) creature).getLocalizedCharacterName() : creature.name;
-            FontHelper.renderFontLeftTopAligned(batch, heading, title, x + pad, top - pad, Settings.CREAM_COLOR);
-            float y = top - pad - titleHeight;
-            batch.setColor(0.26f, 0.32f, 0.36f, 1f);
-            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x + pad, y + rowGap * 0.35f, textWidth, 1);
-            for (PowerTip tip : tips) {
-                if (tip == null) continue;
-                float icon = labelHeight * 0.79f;
-                float tx = x + pad;
-                batch.setColor(Color.WHITE);
-                if (tip.imgRegion != null) {
-                    batch.draw(tip.imgRegion, tx, y - icon, icon, icon);
-                    tx += icon + rowGap * 0.5f;
-                } else if (tip.img != null) {
-                    batch.draw(tip.img, tx, y - icon, icon, icon);
-                    tx += icon + rowGap * 0.5f;
+            float titleScale = titleCap / Math.max(1f, heading.getCapHeight());
+            heading.getData().markupEnabled = false;
+            heading.getData().setScale(headingX * titleScale, headingY * titleScale);
+            FontHelper.renderFontLeftTopAligned(batch, heading, title, x + padX, cursorY, Settings.CREAM_COLOR);
+
+            // Clean divider well below title descenders
+            cursorY -= titleToDivider;
+            batch.setColor(0.78f, 0.64f, 0.37f, 0.34f);
+            batch.draw(ImageMaster.WHITE_SQUARE_IMG, x + padX, cursorY, textWidth, 2f);
+            cursorY -= dividerToBody;
+
+            // Power tips
+            float labelScale = labelCap / Math.max(1f, heading.getCapHeight());
+            for (int i = 0; i < validTips.size(); i++) {
+                PowerTip tip = validTips.get(i);
+                if (i > 0) {
+                    float sepY = cursorY - tipGap * 0.42f;
+                    batch.setColor(0.56f, 0.66f, 0.74f, 0.20f);
+                    batch.draw(ImageMaster.WHITE_SQUARE_IMG, x + padX, sepY, textWidth, 1.5f);
+                    cursorY -= tipGap;
                 }
-                if (tip.header != null) {
-                    FontHelper.renderFontLeftTopAligned(batch, body, tip.header, tx, y, Settings.GOLD_COLOR);
+                if (tip.header != null && !tip.header.isEmpty()) {
+                    float icon = labelCap * 1.24f;
+                    float tx = x + padX;
+                    float iconBottom = cursorY - labelCap * 0.55f - icon * 0.5f;
+                    batch.setColor(Color.WHITE);
+                    if (tip.imgRegion != null) {
+                        batch.draw(tip.imgRegion, tx, iconBottom, icon, icon);
+                        tx += icon + width * 0.012f;
+                    } else if (tip.img != null) {
+                        batch.draw(tip.img, tx, iconBottom, icon, icon);
+                        tx += icon + width * 0.012f;
+                    }
+                    heading.getData().markupEnabled = false;
+                    heading.getData().setScale(headingX * labelScale, headingY * labelScale);
+                    FontHelper.renderFontLeftTopAligned(batch, heading, tip.header, tx, cursorY, Settings.GOLD_COLOR);
+                    cursorY -= labelToBody;
                 }
-                y -= labelHeight;
-                if (tip.body != null) {
-                    FontHelper.renderSmartText(batch, body, tip.body, x + pad, y, textWidth, line, Settings.CREAM_COLOR);
+                if (tip.body != null && !tip.body.isEmpty()) {
+                    float bh = bodyHeights[i];
+                    tipBodies.get(i).drawTop(batch, body, tip.body, Settings.CREAM_COLOR,
+                            x + padX, cursorY, textWidth, Math.max(bh + 12f, bodyCap * 2f),
+                            bodyCap, Align.left, AbstractDungeon.player);
+                    cursorY -= bh;
                 }
-                y -= line + paragraph(body, tip, textWidth, line) + rowGap;
             }
         } finally {
             if (fitted) batch.setTransformMatrix(originalTransform);
+            heading.getData().markupEnabled = headingMarkup;
             heading.getData().setScale(headingX, headingY);
-            body.getData().setScale(bodyX, bodyY);
             batch.setColor(packed);
         }
-    }
-
-    private static float paragraph(BitmapFont body, PowerTip tip, float width, float line) {
-        return tip.body == null ? 0f : Math.abs(FontHelper.getSmartHeight(body, tip.body, width, line));
     }
 }

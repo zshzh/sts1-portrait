@@ -162,9 +162,33 @@ public final class PortraitRichText {
         draw(batch, font, text, color, x, topY, width, height, lineHeight, alignment, character, true);
     }
 
-    private void draw(SpriteBatch batch, BitmapFont font, String text, Color color, float x, float y,
-            float width, float height, float lineHeight, int alignment, AbstractPlayer character, boolean topAligned) {
-        if (text == null || text.isEmpty()) return;
+    float measureHeight(BitmapFont font, String text, float width, float lineHeight) {
+        if (text == null || text.isEmpty()) return 0f;
+        prepareSource(text);
+        BitmapFont.BitmapFontData data = font.getData();
+        float oldX = data.scaleX;
+        float oldY = data.scaleY;
+        boolean markup = data.markupEnabled;
+        float fit = lineHeight / Math.max(1f, font.getCapHeight());
+        installIcons(data, Math.max(1, Math.round(font.getCapHeight() / oldY)));
+        data.markupEnabled = true;
+        data.setScale(oldX * fit, oldY * fit);
+        try {
+            String textToDraw = wrappedFor(font, width);
+            layout.setText(font, textToDraw, Color.WHITE, width, Align.left, true);
+            return layout.height;
+        } finally {
+            data.markupEnabled = markup;
+            data.setScale(oldX, oldY);
+            for (int i = 0; i < placeholders.length; i++) {
+                if ((icons & (1 << i)) == 0) continue;
+                data.setGlyph(FIRST_ICON + i, previousGlyphs[i]);
+                previousGlyphs[i] = null;
+            }
+        }
+    }
+
+    private void prepareSource(String text) {
         if (!text.equals(source)) {
             source = text;
             String prepared = stripOptionBrackets ? stripBrackets(text) : text;
@@ -179,6 +203,12 @@ public final class PortraitRichText {
                 if (icon >= 0 && icon < placeholders.length) icons |= 1 << icon;
             }
         }
+    }
+
+    private void draw(SpriteBatch batch, BitmapFont font, String text, Color color, float x, float y,
+            float width, float height, float lineHeight, int alignment, AbstractPlayer character, boolean topAligned) {
+        if (text == null || text.isEmpty()) return;
+        prepareSource(text);
         BitmapFont.BitmapFontData data = font.getData();
         float oldX = data.scaleX;
         float oldY = data.scaleY;

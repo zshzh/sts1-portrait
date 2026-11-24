@@ -4,7 +4,7 @@
 
 | 组件 | 版本 | 获取 |
 | --- | --- | --- |
-| STS1 Portrait | `0.9.0-preview.59` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.59/STS1Portrait-0.9.0-preview.59.jar) · [源码](./mod) |
+| STS1 Portrait | `0.9.0-preview.61` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.61/STS1Portrait-0.9.0-preview.61.jar) · [源码](./mod) |
 | Slay the Amethyst Plus | `1.6.7-plus.5` | [源码补丁与构建步骤](./launcher/README.md) |
 
 ## Android · Amethyst Plus
@@ -23,6 +23,8 @@
 DroidDeck 需要先由其虚拟显示器提供纵向分辨率，再加载本 MOD。DroidDeck 真机兼容性待验证。
 
 ## 当前版本
+
+- 提高竖屏事件、战斗详情和 Boss 遗物说明的文字清晰度。重排「对对碰」卡牌，更新 Boss 遗物选择界面。
 
 - 重做竖屏事件对话框，改善中文断行与长正文滚动。修正钥匙获取动画落点，并减少取消拖牌时误触结束回合。
 

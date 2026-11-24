@@ -454,13 +454,18 @@ public final class PortraitEvents {
             layout.setText(font, word);
             return;
         }
-        float scaleX = font.getData().scaleX;
-        float scaleY = font.getData().scaleY;
-        font.getData().setScale(scaleX * BODY_SCALE, scaleY * BODY_SCALE);
+        BitmapFont crisp = PortraitFonts.body();
+        float oldX = crisp.getData().scaleX;
+        float oldY = crisp.getData().scaleY;
+        boolean oldMarkup = crisp.getData().markupEnabled;
+        float ratio = font.getCapHeight() / Math.max(1f, crisp.getCapHeight());
+        crisp.getData().markupEnabled = false;
+        crisp.getData().setScale(BODY_SCALE * ratio);
         try {
-            layout.setText(font, word);
+            layout.setText(crisp, word);
         } finally {
-            font.getData().setScale(scaleX, scaleY);
+            crisp.getData().markupEnabled = oldMarkup;
+            crisp.getData().setScale(oldX, oldY);
         }
     }
 
@@ -628,26 +633,46 @@ public final class PortraitEvents {
         return PortraitScreens.enabled() ? spacing * BODY_SCALE : spacing;
     }
 
-    public static float wordScale(float scale) {
-        return drawingWord ? scale * BODY_SCALE : scale;
+    private static void drawCrispDialogWord(SpriteBatch sb, String word, BitmapFont origFont,
+            Color color, float x, float y, float scale, float multiplier) {
+        BitmapFont crisp = PortraitFonts.body();
+        float oldScaleX = crisp.getData().scaleX;
+        float oldScaleY = crisp.getData().scaleY;
+        boolean oldMarkup = crisp.getData().markupEnabled;
+        float baseCap = origFont != null ? origFont.getCapHeight() : FontHelper.charDescFont.getCapHeight();
+        float ratio = baseCap / Math.max(1f, crisp.getCapHeight());
+        crisp.getData().markupEnabled = false;
+        crisp.getData().setScale(scale * multiplier * ratio);
+        crisp.setColor(color);
+        try {
+            crisp.draw(sb, word, x, y);
+        } finally {
+            crisp.getData().markupEnabled = oldMarkup;
+            crisp.getData().setScale(oldScaleX, oldScaleY);
+        }
     }
 
     @SpirePatch(clz = DialogWord.class, method = "render", paramtypez = {SpriteBatch.class})
     public static class EventWordDrawing {
-        @SpireInstrumentPatch
-        public static ExprEditor instrument() {
-            return new ExprEditor() {
-                private boolean firstScale;
+        @SpirePrefixPatch
+        public static SpireReturn<Void> before(DialogWord __instance, SpriteBatch sb, BitmapFont ___font,
+                Color ___color, float ___x, float ___y, float ___offset_x, float ___offset_y, float ___scale) {
+            if (!drawingWord) return SpireReturn.Continue();
+            drawCrispDialogWord(sb, __instance.word, ___font, ___color,
+                    ___x + ___offset_x, ___y + ___offset_y, ___scale, BODY_SCALE);
+            return SpireReturn.Return();
+        }
+    }
 
-                @Override
-                public void edit(MethodCall call) throws CannotCompileException {
-                    if (!firstScale && BitmapFont.BitmapFontData.class.getName().equals(call.getClassName())
-                            && "setScale".equals(call.getMethodName())) {
-                        firstScale = true;
-                        call.replace("{ $proceed(sts1portrait.PortraitEvents.wordScale($1)); }");
-                    }
-                }
-            };
+    @SpirePatch(clz = DialogWord.class, method = "render", paramtypez = {SpriteBatch.class, float.class})
+    public static class RoomWordDrawing {
+        @SpirePrefixPatch
+        public static SpireReturn<Void> before(DialogWord __instance, SpriteBatch sb, float yOffset, BitmapFont ___font,
+                Color ___color, float ___x, float ___y, float ___offset_x, float ___offset_y, float ___scale) {
+            if (!drawingRoomStory) return SpireReturn.Continue();
+            drawCrispDialogWord(sb, __instance.word, ___font, ___color,
+                    ___x + ___offset_x, ___y + ___offset_y + yOffset, ___scale, 1f);
+            return SpireReturn.Return();
         }
     }
 
@@ -675,9 +700,11 @@ public final class PortraitEvents {
         if (title == null || title.isEmpty()) return;
         float alpha = titleColor != null ? titleColor.a : 1f;
         if (alpha <= 0.01f) return;
-        BitmapFont useFont = FontHelper.buttonLabelFont;
+        BitmapFont useFont = PortraitFonts.header();
         float oldX = useFont.getData().scaleX;
         float oldY = useFont.getData().scaleY;
+        boolean oldMarkup = useFont.getData().markupEnabled;
+        useFont.getData().markupEnabled = false;
         float maxW = cardWidth() * 0.86f;
         float targetCap = PortraitViewport.contentHeight() * 0.023f;
         titleMeasure.setText(useFont, title);
@@ -689,6 +716,7 @@ public final class PortraitEvents {
             Color gold = new Color(Settings.GOLD_COLOR.r, Settings.GOLD_COLOR.g, Settings.GOLD_COLOR.b, alpha);
             FontHelper.renderFontCentered(batch, useFont, title, PortraitViewport.x(0.50f), titleCenterY(), gold);
         } finally {
+            useFont.getData().markupEnabled = oldMarkup;
             useFont.getData().setScale(oldX, oldY);
             batch.setColor(packed);
         }
