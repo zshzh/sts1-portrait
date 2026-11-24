@@ -327,12 +327,13 @@ public final class PortraitBattle {
     }
 
     private static float handAnchorY() {
-        return PortraitViewport.y(0) + PortraitViewport.referenceWidth() * 0.076f;
+        // Lift the combat lower zone cleanly above the OS bottom gesture bar while keeping the 5-slot layout intact.
+        return PortraitViewport.y(0) + PortraitViewport.referenceWidth() * 0.128f;
     }
 
     private static float hudY() {
         float width = PortraitViewport.referenceWidth();
-        return Math.max(width * .065f, handAnchorY() - width * .036f);
+        return Math.max(width * .108f, handAnchorY() - width * .044f);
     }
 
     static float bottomControlX(int slot) {

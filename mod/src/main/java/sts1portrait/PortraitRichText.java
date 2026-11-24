@@ -16,6 +16,7 @@ import com.megacrit.cardcrawl.helpers.FontHelper;
 import javassist.CannotCompileException;
 import javassist.expr.ExprEditor;
 import javassist.expr.MethodCall;
+import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,36 +24,119 @@ public final class PortraitRichText {
     // Treat brackets enclosing a choice as text so the color tokens inside remain visible to the parser.
     private static final Pattern MARKUP = Pattern.compile(
             "(?<![^\\s\\[])(NL|TAB)(?=[\\s\\]]|$)"
-            + "|(?<![^\\s\\[])#([rgbyp])([^\\s\\[\\]]+|\\[[^\\s\\[\\]]+\\])"
+            + "|(?<![^\\s\\[·])#([rgbyp])([^\\s\\[\\]]+|\\[[^\\s\\[\\]]+\\])"
             + "|\\[([^\\[\\]\\s#]*|#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?)\\]");
     private static final Pattern HEX = Pattern.compile("#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})");
     private static final String ICON_CODES = "ERGBWCPTS";
     private static final char FIRST_ICON = '\uE000';
+    private static final String NO_LINE_START = "。，、；：！？）】》”’」』.,;:!?)]%％";
+    private static final String NO_LINE_END = "（【《“‘「『([";
+    private static final String SENTENCE_BREAK = "。！？；.!?;";
+    private static final String CLAUSE_BREAK = "，、,";
     private static final BitmapFont.Glyph[] placeholders = new BitmapFont.Glyph[ICON_CODES.length()];
     private static final BitmapFont.Glyph[] previousGlyphs = new BitmapFont.Glyph[ICON_CODES.length()];
     private static final GlyphLayout layout = new GlyphLayout();
     private static final String COLOR_TAGS = "(?:\\[(?:#[0-9a-fA-F]{6,8}|[A-Za-z_]+)?\\])*";
     private static final Pattern BEFORE_CN_NUMBER = Pattern.compile(
-            "([\\p{IsHan}：])(" + COLOR_TAGS + ")[ \\t\\u3000]+(" + COLOR_TAGS + ")(?=[+−-]?[0-9])");
+            "([\\p{IsHan}：。，！？；—])(" + COLOR_TAGS + ")[ \\t\\u3000]+(" + COLOR_TAGS + ")(?=[+−-]?[0-9])");
     private static final Pattern AFTER_CN_NUMBER = Pattern.compile(
-            "([0-9%％])(" + COLOR_TAGS + ")[ \\t\\u3000]+(" + COLOR_TAGS
+            "([0-9%％:：])(" + COLOR_TAGS + ")[ \\t\\u3000]+(" + COLOR_TAGS
                     + ")(?=[\\p{IsHan}，。！？、；：）])");
     private final boolean eventSpacing;
+    private final boolean stripOptionBrackets;
 
-    public PortraitRichText() { this(false); }
-    PortraitRichText(boolean eventSpacing) { this.eventSpacing = eventSpacing; }
+    public PortraitRichText() { this(false, false); }
+    PortraitRichText(boolean eventSpacing) { this(eventSpacing, false); }
+    PortraitRichText(boolean eventSpacing, boolean stripOptionBrackets) {
+        this.eventSpacing = eventSpacing;
+        this.stripOptionBrackets = stripOptionBrackets;
+    }
 
     private static final Pattern BETWEEN_CN_COLOR = Pattern.compile(
             "([\\p{IsHan}，。！？、；：）])(" + COLOR_TAGS + ")[ \\t\\u3000]+(" + COLOR_TAGS
                     + ")(?=[\\p{IsHan}，。！？、；：）])");
+    private static final Pattern MERGE_SAME_COLOR = Pattern.compile(
+            "\\[(#[0-9a-fA-F]{6,8})\\]([^\\[]*)\\[\\]\\[\\1\\]");
+    private static final Pattern MULTI_SPACE_AFTER_BRACKET = Pattern.compile("\\][ \\t\\u3000]{2,}");
+
+    static String stripBrackets(String text) {
+        if (text == null) return null;
+        String s = text.trim();
+        if (s.length() < 3 || s.charAt(0) != '[') return text;
+        int close = findOptionBracketClose(s);
+        if (close <= 1) return text;
+        String inside = s.substring(1, close).trim();
+        if (inside.isEmpty() || isMarkupBracket(inside)) return text;
+        String rest = s.substring(close + 1).trim();
+        if (rest.isEmpty()) return inside;
+        char last = inside.charAt(inside.length() - 1);
+        String sep;
+        if (last == '！' || last == '？' || last == '!' || last == '?' || last == '：' || last == ':') {
+            sep = " ";
+        } else if (isCjkChar(last)) {
+            // The ZHS font renders '·' as a full-width glyph with built-in side bearings.
+            sep = "·";
+        } else {
+            sep = " · ";
+        }
+        return inside + sep + rest;
+    }
+
+    private static boolean isCjkChar(char c) {
+        Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
+        return block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A
+                || block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
+                || block == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION
+                || block == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS
+                || block == Character.UnicodeBlock.HIRAGANA
+                || block == Character.UnicodeBlock.KATAKANA
+                || block == Character.UnicodeBlock.HANGUL_SYLLABLES;
+    }
+
+    private static int findOptionBracketClose(String s) {
+        int len = s.length();
+        for (int i = 1; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '[') {
+                int innerClose = s.indexOf(']', i + 1);
+                if (innerClose > i) {
+                    String inner = s.substring(i + 1, innerClose);
+                    if (isMarkupBracket(inner)) {
+                        i = innerClose;
+                        continue;
+                    }
+                }
+            } else if (c == ']') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isMarkupBracket(String tag) {
+        if (tag.isEmpty()) return true;
+        if (tag.length() == 1 && ICON_CODES.indexOf(tag.charAt(0)) >= 0) return true;
+        return HEX.matcher(tag).matches() || Colors.get(tag) != null;
+    }
 
     static String tightenEventNumbers(String text) {
         String s = AFTER_CN_NUMBER.matcher(BEFORE_CN_NUMBER.matcher(text).replaceAll("$1$2$3")).replaceAll("$1$2$3");
-        return BETWEEN_CN_COLOR.matcher(s).replaceAll("$1$2$3");
+        s = BETWEEN_CN_COLOR.matcher(s).replaceAll("$1$2$3");
+        s = MULTI_SPACE_AFTER_BRACKET.matcher(s).replaceAll("] ");
+        String prev;
+        do {
+            prev = s;
+            s = MERGE_SAME_COLOR.matcher(s).replaceAll("[$1]$2");
+        } while (!s.equals(prev));
+        return s;
     }
 
     private String source;
     private String formatted;
+    private String wrapped;
+    private float wrappedWidth = -1f;
+    private float wrappedScale = -1f;
     private int icons;
 
     static {
@@ -83,8 +167,12 @@ public final class PortraitRichText {
         if (text == null || text.isEmpty()) return;
         if (!text.equals(source)) {
             source = text;
-            formatted = format(text);
+            String prepared = stripOptionBrackets ? stripBrackets(text) : text;
+            formatted = format(prepared);
             if (eventSpacing) formatted = tightenEventNumbers(formatted);
+            wrapped = null;
+            wrappedWidth = -1f;
+            wrappedScale = -1f;
             icons = 0;
             for (int i = 0; i < formatted.length(); i++) {
                 int icon = formatted.charAt(i) - FIRST_ICON;
@@ -100,11 +188,13 @@ public final class PortraitRichText {
         data.markupEnabled = true;
         data.setScale(oldX * fit, oldY * fit);
         try {
-            layout.setText(font, formatted, color, width, Align.left, true);
+            String textToDraw = wrappedFor(font, width);
+            layout.setText(font, textToDraw, color, width, Align.left, true);
             if (layout.height > height || layout.width > width) {
                 fit *= Math.min(height / Math.max(layout.height, height), width / Math.max(layout.width, width));
                 data.setScale(oldX * fit, oldY * fit);
-                layout.setText(font, formatted, color, width, Align.left, true);
+                textToDraw = wrappedFor(font, width);
+                layout.setText(font, textToDraw, color, width, Align.left, true);
             }
             if (alignment == Align.center) centerLines(width, data.scaleX);
             float top = topAligned ? y : y + layout.height * .5f;
@@ -119,6 +209,308 @@ public final class PortraitRichText {
                 previousGlyphs[i] = null;
             }
         }
+    }
+
+    private String wrappedFor(BitmapFont font, float width) {
+        float scaleX = font.getData().scaleX;
+        if (wrapped == null || Math.abs(wrappedWidth - width) > 0.5f || Math.abs(wrappedScale - scaleX) > 0.0005f) {
+            wrapped = wrapRichText(font, formatted, width);
+            wrappedWidth = width;
+            wrappedScale = scaleX;
+        }
+        return wrapped;
+    }
+
+    private static final class WrapToken {
+        String raw;
+        String visible;
+        boolean space;
+        float width;
+        BitmapFont.Glyph firstGlyph;
+        BitmapFont.Glyph lastGlyph;
+
+        WrapToken(String raw, String visible, boolean space) {
+            this.raw = raw;
+            this.visible = visible;
+            this.space = space;
+        }
+    }
+
+    static String wrapRichText(BitmapFont font, String text, float maxWidth) {
+        if (text == null || text.isEmpty() || maxWidth <= 1f) return text;
+        BitmapFont.BitmapFontData data = font.getData();
+        StringBuilder out = new StringBuilder(text.length() + 16);
+        int start = 0;
+        int len = text.length();
+        while (start <= len) {
+            int nl = text.indexOf('\n', start);
+            String para = nl < 0 ? text.substring(start) : text.substring(start, nl);
+            wrapParagraph(data, para, maxWidth, out);
+            if (nl < 0) break;
+            out.append('\n');
+            start = nl + 1;
+        }
+        return out.toString();
+    }
+
+    private static void wrapParagraph(BitmapFont.BitmapFontData data, String para, float maxWidth, StringBuilder out) {
+        if (para.isEmpty()) return;
+        ArrayList<WrapToken> tokens = tokenizeParagraph(para);
+        if (tokens.isEmpty()) {
+            out.append(para);
+            return;
+        }
+        glueTokens(tokens);
+        for (int i = 0; i < tokens.size(); i++) {
+            measureToken(data, tokens.get(i));
+        }
+        float scaleX = data.scaleX;
+        float limit = maxWidth * 0.992f;
+        int n = tokens.size();
+        int start = 0;
+        while (start < n) {
+            if (spanWidth(tokens, start, n, scaleX) <= limit) {
+                for (int i = start; i < n; i++) out.append(tokens.get(i).raw);
+                return;
+            }
+            int greedyEnd = start + 1;
+            while (greedyEnd < n && spanWidth(tokens, start, greedyEnd + 1, scaleX) <= limit) {
+                greedyEnd++;
+            }
+            int chosenEnd = chooseBreak(tokens, start, greedyEnd, n, limit, scaleX);
+            int emitEnd = chosenEnd;
+            while (emitEnd > start && tokens.get(emitEnd - 1).space) emitEnd--;
+            for (int i = start; i < emitEnd; i++) out.append(tokens.get(i).raw);
+            for (int i = emitEnd; i < chosenEnd; i++) appendMarkupOnly(out, tokens.get(i).raw);
+            int nextStart = chosenEnd;
+            StringBuilder skippedMarkup = null;
+            while (nextStart < n && tokens.get(nextStart).space) {
+                if (skippedMarkup == null) skippedMarkup = new StringBuilder();
+                appendMarkupOnly(skippedMarkup, tokens.get(nextStart).raw);
+                nextStart++;
+            }
+            if (nextStart >= n) {
+                if (skippedMarkup != null) out.append(skippedMarkup);
+                return;
+            }
+            out.append('\n');
+            if (skippedMarkup != null) out.append(skippedMarkup);
+            start = nextStart;
+        }
+    }
+
+    private static int chooseBreak(ArrayList<WrapToken> tokens, int start, int greedyEnd, int n,
+            float limit, float scaleX) {
+        int bestSentence = -1;
+        int bestClause = -1;
+        for (int i = greedyEnd - 1; i >= start; i--) {
+            WrapToken tok = tokens.get(i);
+            if (tok.space || tok.visible.isEmpty()) continue;
+            int breakEnd = i + 1;
+            int nextStart = breakEnd;
+            while (nextStart < n && tokens.get(nextStart).space) nextStart++;
+            if (nextStart >= n) continue;
+            float lineW = spanWidth(tokens, start, breakEnd, scaleX);
+            if (lineW < limit * 0.36f) break;
+            char last = tok.visible.charAt(tok.visible.length() - 1);
+            boolean sentence = SENTENCE_BREAK.indexOf(last) >= 0;
+            boolean clause = !sentence && CLAUSE_BREAK.indexOf(last) >= 0;
+            if (!sentence && !clause) continue;
+            boolean remainderFits = spanWidth(tokens, nextStart, n, scaleX) <= limit;
+            if (sentence && bestSentence < 0 && (remainderFits || lineW >= limit * 0.65f)) {
+                bestSentence = breakEnd;
+                break;
+            }
+            if (clause && bestClause < 0 && (remainderFits || lineW >= limit * 0.72f)) {
+                bestClause = breakEnd;
+            }
+        }
+        if (bestSentence > 0) return bestSentence;
+        if (bestClause > 0) return bestClause;
+        // Orphan-tail protection: avoid leaving a lone 1-2 char stub (e.g. "物。" or "组。") on the final line.
+        int remStart = greedyEnd;
+        while (remStart < n && tokens.get(remStart).space) remStart++;
+        int remChars = 0;
+        for (int i = remStart; i < n; i++) {
+            if (!tokens.get(i).space) remChars += tokens.get(i).visible.length();
+        }
+        if (remChars > 0 && remChars <= 2 && greedyEnd - start >= 5) {
+            int pulled = greedyEnd - 2;
+            while (pulled > start + 2 && tokens.get(pulled - 1).space) pulled--;
+            if (spanWidth(tokens, pulled, n, scaleX) <= limit) return pulled;
+        }
+        return greedyEnd;
+    }
+
+    private static ArrayList<WrapToken> tokenizeParagraph(String para) {
+        ArrayList<WrapToken> tokens = new ArrayList<>();
+        int len = para.length();
+        int i = 0;
+        StringBuilder pending = new StringBuilder();
+        while (i < len) {
+            int tagEnd = matchLibgdxTag(para, i);
+            if (tagEnd > i) {
+                pending.append(para, i, tagEnd);
+                i = tagEnd;
+                continue;
+            }
+            char c = para.charAt(i);
+            if (c == '[' && i + 1 < len && para.charAt(i + 1) == '[') {
+                tokens.add(new WrapToken(pending.toString() + "[[", "[", false));
+                pending.setLength(0);
+                i += 2;
+                continue;
+            }
+            if (c == ' ' || c == '\t') {
+                int j = i + 1;
+                while (j < len && (para.charAt(j) == ' ' || para.charAt(j) == '\t')) j++;
+                String raw = pending.toString() + para.substring(i, j);
+                tokens.add(new WrapToken(raw, para.substring(i, j), true));
+                pending.setLength(0);
+                i = j;
+                continue;
+            }
+            if (isLatinWordChar(c)) {
+                StringBuilder raw = new StringBuilder(pending);
+                StringBuilder vis = new StringBuilder();
+                pending.setLength(0);
+                while (i < len) {
+                    char ch = para.charAt(i);
+                    if (isLatinWordChar(ch)) {
+                        raw.append(ch);
+                        vis.append(ch);
+                        i++;
+                    } else if ((ch == '.' || ch == '/') && i + 1 < len && isLatinWordChar(para.charAt(i + 1))) {
+                        raw.append(ch);
+                        vis.append(ch);
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                tokens.add(new WrapToken(raw.toString(), vis.toString(), false));
+                continue;
+            }
+            tokens.add(new WrapToken(pending.toString() + c, String.valueOf(c), false));
+            pending.setLength(0);
+            i++;
+        }
+        if (pending.length() > 0 && !tokens.isEmpty()) {
+            tokens.get(tokens.size() - 1).raw += pending.toString();
+        }
+        return tokens;
+    }
+
+    private static void glueTokens(ArrayList<WrapToken> tokens) {
+        // Attach " ·" or "·" to the preceding action label so the separator dot never begins a wrapped line.
+        for (int i = 1; i < tokens.size(); ) {
+            WrapToken cur = tokens.get(i);
+            if (!cur.space && "·".equals(cur.visible)) {
+                WrapToken prev = tokens.get(i - 1);
+                if (!prev.space) {
+                    prev.raw += cur.raw;
+                    prev.visible += cur.visible;
+                    tokens.remove(i);
+                    continue;
+                } else if (i >= 2 && !tokens.get(i - 2).space) {
+                    WrapToken before = tokens.get(i - 2);
+                    before.raw += prev.raw + cur.raw;
+                    before.visible += prev.visible + cur.visible;
+                    tokens.remove(i);
+                    tokens.remove(i - 1);
+                    i--;
+                    continue;
+                }
+            }
+            i++;
+        }
+        // Keep closing/trailing punctuation attached to the preceding token (kinshoku).
+        for (int i = 1; i < tokens.size(); ) {
+            WrapToken cur = tokens.get(i);
+            WrapToken prev = tokens.get(i - 1);
+            if (!cur.space && !prev.space && cur.visible.length() == 1
+                    && NO_LINE_START.indexOf(cur.visible.charAt(0)) >= 0) {
+                prev.raw += cur.raw;
+                prev.visible += cur.visible;
+                tokens.remove(i);
+            } else {
+                i++;
+            }
+        }
+        // Keep opening punctuation attached to the following token (kinshoku).
+        for (int i = tokens.size() - 2; i >= 0; i--) {
+            WrapToken cur = tokens.get(i);
+            WrapToken next = tokens.get(i + 1);
+            if (!cur.space && !next.space && cur.visible.length() == 1
+                    && NO_LINE_END.indexOf(cur.visible.charAt(0)) >= 0) {
+                next.raw = cur.raw + next.raw;
+                next.visible = cur.visible + next.visible;
+                tokens.remove(i);
+            }
+        }
+    }
+
+    private static boolean isLatinWordChar(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                || c == '+' || c == '-' || c == '−' || c == '_' || c == '\'';
+    }
+
+    private static int matchLibgdxTag(String s, int start) {
+        if (s.charAt(start) != '[') return -1;
+        if (start + 1 < s.length() && s.charAt(start + 1) == '[') return -1;
+        int close = s.indexOf(']', start + 1);
+        if (close < 0) return -1;
+        String tag = s.substring(start + 1, close);
+        if (tag.isEmpty() || HEX.matcher(tag).matches() || Colors.get(tag) != null) {
+            return close + 1;
+        }
+        return -1;
+    }
+
+    private static void appendMarkupOnly(StringBuilder out, String raw) {
+        int i = 0;
+        int len = raw.length();
+        while (i < len) {
+            int tagEnd = matchLibgdxTag(raw, i);
+            if (tagEnd > i) {
+                out.append(raw, i, tagEnd);
+                i = tagEnd;
+            } else {
+                i++;
+            }
+        }
+    }
+
+    private static void measureToken(BitmapFont.BitmapFontData data, WrapToken token) {
+        float w = 0f;
+        BitmapFont.Glyph prev = null;
+        for (int i = 0; i < token.visible.length(); i++) {
+            char ch = token.visible.charAt(i);
+            BitmapFont.Glyph g = data.getGlyph(ch);
+            if (g == null) continue;
+            if (token.firstGlyph == null) token.firstGlyph = g;
+            if (prev != null) w += prev.getKerning(ch) * data.scaleX;
+            w += g.xadvance * data.scaleX;
+            prev = g;
+        }
+        token.lastGlyph = prev;
+        token.width = w;
+    }
+
+    private static float spanWidth(ArrayList<WrapToken> tokens, int from, int to, float scaleX) {
+        int end = to;
+        while (end > from && tokens.get(end - 1).space) end--;
+        float w = 0f;
+        BitmapFont.Glyph prev = null;
+        for (int i = from; i < end; i++) {
+            WrapToken tok = tokens.get(i);
+            if (prev != null && tok.firstGlyph != null) {
+                w += prev.getKerning((char) tok.firstGlyph.id) * scaleX;
+            }
+            w += tok.width;
+            if (tok.lastGlyph != null) prev = tok.lastGlyph;
+        }
+        return w;
     }
 
     private void installIcons(BitmapFont.BitmapFontData data, int cap) {

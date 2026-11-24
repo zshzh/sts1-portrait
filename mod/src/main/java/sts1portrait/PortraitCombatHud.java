@@ -55,6 +55,8 @@ import com.megacrit.cardcrawl.potions.PotionSlot;
 import com.megacrit.cardcrawl.relics.AbstractRelic;
 import com.megacrit.cardcrawl.rooms.AbstractRoom;
 import com.megacrit.cardcrawl.screens.stats.CharStat;
+import com.megacrit.cardcrawl.vfx.AbstractGameEffect;
+import com.megacrit.cardcrawl.vfx.ObtainKeyEffect;
 import com.megacrit.cardcrawl.vfx.combat.HealPanelEffect;
 import com.megacrit.cardcrawl.vfx.combat.PingHpEffect;
 import com.megacrit.cardcrawl.vfx.ExhaustPileParticle;
@@ -93,6 +95,8 @@ public final class PortraitCombatHud {
     private static final Matrix4 poseScaled = new Matrix4();
     private static final Matrix4 healthEffectOriginal = new Matrix4();
     private static final Matrix4 healthEffectMoved = new Matrix4();
+    private static final Matrix4 keyEffectOriginal = new Matrix4();
+    private static final Matrix4 keyEffectMoved = new Matrix4();
     private static final RMethod hp = method("renderHP");
     private static final RMethod gold = method("renderGold");
     private static final RMethod map = method("renderMapIcon");
@@ -542,11 +546,14 @@ public final class PortraitCombatHud {
             drawAt(panel, batch, potions, first.hb, potionScreenX(first), itemsY(), potionScale());
         }
         batch.setColor(Color.WHITE);
-        float keySize = width * 0.033f;
-        float keyStart = Sts2Preview.compact() ? .722f : .372f;
-        if (Settings.hasRubyKey) drawIcon(batch, ImageMaster.RUBY_KEY, keyStart, itemsY(), keySize);
-        if (Settings.hasEmeraldKey) drawIcon(batch, ImageMaster.EMERALD_KEY, keyStart + .033f, itemsY(), keySize);
-        if (Settings.hasSapphireKey) drawIcon(batch, ImageMaster.SAPPHIRE_KEY, keyStart + .066f, itemsY(), keySize);
+        float keySize = keyIconSize(width);
+        float keyCenter = keyCenterX();
+        if (Settings.isFinalActAvailable || Settings.hasRubyKey || Settings.hasEmeraldKey || Settings.hasSapphireKey) {
+            drawIcon(batch, ImageMaster.KEY_SLOTS_ICON, keyCenter, itemsY(), keySize);
+        }
+        if (Settings.hasRubyKey) drawIcon(batch, ImageMaster.RUBY_KEY, keyCenter, itemsY(), keySize);
+        if (Settings.hasEmeraldKey) drawIcon(batch, ImageMaster.EMERALD_KEY, keyCenter, itemsY(), keySize);
+        if (Settings.hasSapphireKey) drawIcon(batch, ImageMaster.SAPPHIRE_KEY, keyCenter, itemsY(), keySize);
         drawRelics(batch);
         if (showRunInfo()) drawRunInfo(batch);
         batch.setColor(old);
@@ -692,6 +699,44 @@ public final class PortraitCombatHud {
         @SpirePostfixPatch
         public static void after(Object __instance, SpriteBatch batch) {
             if (topBarActive()) batch.setTransformMatrix(healthEffectOriginal);
+        }
+    }
+
+    private static float keyCenterX() {
+        return Sts2Preview.compact() ? 0.755f : 0.405f;
+    }
+
+    private static float keyIconSize(float width) {
+        return width * 0.056f;
+    }
+
+    @SpirePatch(clz = ObtainKeyEffect.class, method = "render", paramtypez = {SpriteBatch.class})
+    public static class ObtainKeyEffectDrawing {
+        @SpirePrefixPatch
+        public static void before(ObtainKeyEffect __instance, SpriteBatch batch, float ___x, float ___y) {
+            if (!topBarActive()) return;
+            float width = PortraitViewport.referenceWidth();
+            float keySize = keyIconSize(width);
+            float effectScale = ReflectionHacks.<Float>getPrivate(__instance, AbstractGameEffect.class, "scale");
+            float rawRatio = effectScale / Math.max(0.01f, 1.1f * Settings.scale);
+            float progress = MathUtils.clamp((rawRatio - 1f) / (5.0f / 1.1f - 1f), 0f, 1f);
+            float maxMultiplier = Math.min(3.0f, Math.max(1.8f, (Settings.HEIGHT - itemsY()) / (keySize * 0.60f)));
+            float desiredSize = keySize * (1f + (maxMultiplier - 1f) * progress);
+            float scale = desiredSize / Math.max(1f, 64f * effectScale);
+            float sourceX = ___x + 32f;
+            float sourceY = ___y + 32f;
+            float targetX = toolbarX(keyCenterX());
+            float targetY = itemsY();
+            keyEffectOriginal.set(batch.getTransformMatrix());
+            keyEffectMoved.set(keyEffectOriginal)
+                    .translate(targetX - sourceX * scale, targetY - sourceY * scale, 0f)
+                    .scale(scale, scale, 1f);
+            batch.setTransformMatrix(keyEffectMoved);
+        }
+
+        @SpirePostfixPatch
+        public static void after(ObtainKeyEffect __instance, SpriteBatch batch) {
+            if (topBarActive()) batch.setTransformMatrix(keyEffectOriginal);
         }
     }
 

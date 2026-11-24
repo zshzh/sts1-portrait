@@ -139,7 +139,7 @@ public final class PortraitUi {
         quadVertices[o + 4] = 0.5f;
     }
 
-    private static void drawCutCorner(SpriteBatch batch, float left, float bottom, float right, float top, float cut) {
+    static void drawCutCorner(SpriteBatch batch, float left, float bottom, float right, float top, float cut) {
         float color = batch.getPackedColor();
         setOct(0, left + cut, bottom, color);
         setOct(1, left, bottom + cut, color);
@@ -572,20 +572,61 @@ public final class PortraitUi {
 
     @SpirePatch(clz = LargeDialogOptionButton.class, method = SpirePatch.CLASS)
     public static class OptionText {
-        public static final SpireField<PortraitRichText> text = new SpireField<>(() -> new PortraitRichText(true));
+        public static final SpireField<PortraitRichText> text = new SpireField<>(() -> new PortraitRichText(true, true));
     }
 
+    private static final Color DISABLED_OPTION_TEXT = new Color(0.58f, 0.61f, 0.65f, 0.90f);
+
     static void drawOption(SpriteBatch batch, LargeDialogOptionButton option) {
+        drawOption(batch, option, 2);
+    }
+
+    static void drawOption(SpriteBatch batch, LargeDialogOptionButton option, int count) {
         Hitbox area = option.hb;
+        float left = area.x;
+        float bottom = area.y;
+        float right = left + area.width;
+        float top = bottom + area.height;
+        float cut = Math.min(area.height * 0.20f, area.width * 0.032f);
+        float border = Math.max(2f, area.height * 0.024f);
+        boolean disabled = option.isDisabled;
+        boolean hovered = area.hovered && !disabled;
+        boolean singleChoice = count <= 1;
+
         float color = batch.getPackedColor();
-        batch.setColor(area.hovered && !option.isDisabled ? 0.24f : 0.09f, 0.13f, 0.16f, 0.96f);
-        batch.draw(ImageMaster.WHITE_SQUARE_IMG, area.x, area.y, area.width, area.height);
-        float pad = area.width * .048f;
         try {
+            if (disabled) {
+                batch.setColor(0.32f, 0.36f, 0.40f, 0.48f);
+                drawCutCorner(batch, left, bottom, right, top, cut);
+                batch.setColor(0.055f, 0.068f, 0.082f, 0.82f);
+                drawCutCorner(batch, left + border, bottom + border, right - border, top - border,
+                        Math.max(1f, cut - border * 0.6f));
+            } else {
+                batch.setColor(hovered ? 0.92f : 0.54f, hovered ? 0.76f : 0.66f, hovered ? 0.42f : 0.74f,
+                        hovered ? 0.98f : 0.72f);
+                drawCutCorner(batch, left, bottom, right, top, cut);
+                batch.setColor(hovered ? 0.155f : 0.088f, hovered ? 0.235f : 0.135f, hovered ? 0.295f : 0.178f,
+                        hovered ? 0.98f : 0.94f);
+                drawCutCorner(batch, left + border, bottom + border, right - border, top - border,
+                        Math.max(1f, cut - border * 0.6f));
+                // Subtle warm gold vertical accent pill on multi-choice active options for crisp visual scanning.
+                if (!singleChoice) {
+                    float barW = Math.max(5f, area.width * 0.006f);
+                    float barH = area.height * 0.46f;
+                    batch.setColor(hovered ? 1f : 0.86f, hovered ? 0.86f : 0.70f, hovered ? 0.50f : 0.38f,
+                            hovered ? 0.98f : 0.82f);
+                    batch.draw(ImageMaster.WHITE_SQUARE_IMG,
+                            left + border + area.width * 0.022f, area.cY - barH * 0.5f, barW, barH);
+                }
+            }
+            float padLeft = area.width * 0.048f;
+            float padRight = area.width * 0.028f;
+            // Uniform crisp font size across all options so 1-line and 2-line choices match visually with generous padding.
+            float targetCap = Math.min(area.height * 0.224f, PortraitViewport.contentWidth() * 0.0248f);
             OptionText.text.get(option).draw(batch, FontHelper.buttonLabelFont, option.msg,
-                    option.isDisabled ? Color.LIGHT_GRAY : Settings.CREAM_COLOR, area.x + pad, area.cY,
-                    area.width - 2 * pad, area.height * .72f, Math.min(area.width * .036f, area.height * .43f),
-                    Align.center);
+                    disabled ? DISABLED_OPTION_TEXT : Settings.CREAM_COLOR,
+                    left + padLeft, area.cY, area.width - padLeft - padRight, area.height * 0.72f,
+                    targetCap, singleChoice ? Align.center : Align.left);
         } finally {
             batch.setColor(color);
         }

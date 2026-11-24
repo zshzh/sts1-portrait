@@ -289,7 +289,7 @@ public final class OpeningPatches {
         public static void postfix(NeowRoom __instance) {
             AbstractPlayer player = AbstractDungeon.player;
             if (PortraitViewport.active() && player != null) {
-                player.movePosition(PortraitViewport.x(0.19f), PortraitViewport.y(0.465f));
+                player.movePosition(PortraitViewport.x(0.22f), PortraitViewport.y(0.490f));
             }
         }
     }
@@ -303,8 +303,8 @@ public final class OpeningPatches {
                 public void edit(NewExpr expr) throws CannotCompileException {
                     if ("com.megacrit.cardcrawl.characters.AnimatedNpc".equals(expr.getClassName())) {
                         expr.replace("{ if (sts1portrait.PortraitViewport.active()) {"
-                                + " $1 = sts1portrait.PortraitViewport.x(0.65f);"
-                                + " $2 = sts1portrait.PortraitViewport.y(0.455f); } $_ = $proceed($$); }");
+                                + " $1 = sts1portrait.PortraitViewport.x(0.74f);"
+                                + " $2 = sts1portrait.PortraitViewport.y(0.485f); } $_ = $proceed($$); }");
                     }
                 }
             };
@@ -312,8 +312,6 @@ public final class OpeningPatches {
     }
 
     @SpirePatch(clz = NeowEvent.class, method = "talk", paramtypez = {String.class})
-    @SpirePatch(clz = RoomEventDialog.class, method = "updateBodyText",
-            paramtypez = {String.class, DialogWord.AppearEffect.class})
     public static class NeowText {
         @SpireInstrumentPatch
         public static ExprEditor instrument() {
@@ -322,25 +320,38 @@ public final class OpeningPatches {
                 public void edit(FieldAccess field) throws CannotCompileException {
                     if (!field.isReader()) return;
                     String value;
-                    String condition = "sts1portrait.OpeningPatches.neowActive()";
                     switch (field.getFieldName()) {
-                        case "DIALOG_X":
-                            condition = "sts1portrait.PortraitViewport.active()";
-                            value = "x(0.47f)";
-                            break;
-                        case "DIALOG_Y":
-                            condition = "sts1portrait.PortraitViewport.active()";
-                            value = "y(0.43f)";
-                            break;
-                        case "DIALOG_MSG_X": value = "x(0.08f)"; break;
-                        case "DIALOG_MSG_Y": value = "y(0.38f)"; break;
-                        case "DIALOG_MSG_W": value = "contentWidth() * 0.84f"; break;
+                        case "DIALOG_X": value = "x(0.56f)"; break;
+                        case "DIALOG_Y": value = "y(0.675f)"; break;
                         default: return;
                     }
-                    field.replace("{ $_ = " + condition + " ? sts1portrait.PortraitViewport."
+                    field.replace("{ $_ = sts1portrait.PortraitViewport.active() ? sts1portrait.PortraitViewport."
                             + value + " : $proceed(); }");
                 }
             };
+        }
+    }
+
+    private static final com.badlogic.gdx.math.Matrix4 neowBubbleBase = new com.badlogic.gdx.math.Matrix4();
+    private static final com.badlogic.gdx.math.Matrix4 neowBubbleScaled = new com.badlogic.gdx.math.Matrix4();
+    private static final float NEOW_BUBBLE_SCALE = 1.48f;
+
+    @SpirePatch(clz = com.megacrit.cardcrawl.vfx.InfiniteSpeechBubble.class, method = "render", paramtypez = {SpriteBatch.class})
+    @SpirePatch(clz = com.megacrit.cardcrawl.vfx.SpeechTextEffect.class, method = "render", paramtypez = {SpriteBatch.class})
+    public static class NeowSpeechScale {
+        @SpirePrefixPatch
+        public static void before(Object __instance, SpriteBatch batch, float ___x, float ___y) {
+            if (!neowActive()) return;
+            neowBubbleBase.set(batch.getTransformMatrix());
+            neowBubbleScaled.set(neowBubbleBase)
+                    .translate(___x * (1f - NEOW_BUBBLE_SCALE), ___y * (1f - NEOW_BUBBLE_SCALE), 0f)
+                    .scale(NEOW_BUBBLE_SCALE, NEOW_BUBBLE_SCALE, 1f);
+            batch.setTransformMatrix(neowBubbleScaled);
+        }
+
+        @SpirePostfixPatch
+        public static void after(Object __instance, SpriteBatch batch) {
+            if (neowActive()) batch.setTransformMatrix(neowBubbleBase);
         }
     }
 

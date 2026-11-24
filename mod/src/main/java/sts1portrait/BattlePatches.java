@@ -1,5 +1,6 @@
 package sts1portrait;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpireInstrumentPatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
@@ -208,6 +209,55 @@ public final class BattlePatches {
         @SpireInstrumentPatch
         public static ExprEditor instrument() {
             return endTurnAnchor("SHOW_X", "endTurnX");
+        }
+    }
+
+    @SpirePatch(clz = EndTurnButton.class, method = "update", paramtypez = {})
+    public static class EndTurnReleaseGuard {
+        private static final float POST_DRAG_GUARD_SECONDS = 0.25f;
+        private static boolean wasDragging;
+        private static float guardTimer;
+        private static boolean suppressedClick;
+
+        @SpirePrefixPatch
+        public static void before(EndTurnButton __instance) {
+            suppressedClick = false;
+            if (!PortraitBattle.active() || AbstractDungeon.player == null) {
+                wasDragging = false;
+                guardTimer = 0f;
+                return;
+            }
+            boolean dragging = AbstractDungeon.player.isDraggingCard || AbstractDungeon.player.inSingleTargetMode;
+            if (dragging) {
+                wasDragging = true;
+                guardTimer = POST_DRAG_GUARD_SECONDS;
+            } else if (wasDragging) {
+                wasDragging = false;
+                guardTimer = POST_DRAG_GUARD_SECONDS;
+            } else if (guardTimer > 0f) {
+                guardTimer = Math.max(0f, guardTimer - Gdx.graphics.getDeltaTime());
+            }
+            if (guardTimer > 0f && com.megacrit.cardcrawl.helpers.input.InputHelper.justClickedLeft) {
+                com.megacrit.cardcrawl.helpers.Hitbox hb = basemod.ReflectionHacks.getPrivate(
+                        __instance, EndTurnButton.class, "hb");
+                if (hb != null && hb.hovered) {
+                    com.megacrit.cardcrawl.helpers.input.InputHelper.justClickedLeft = false;
+                    suppressedClick = true;
+                }
+            }
+        }
+
+        @SpirePostfixPatch
+        public static void after(EndTurnButton __instance) {
+            if (suppressedClick) {
+                com.megacrit.cardcrawl.helpers.Hitbox hb = basemod.ReflectionHacks.getPrivate(
+                        __instance, EndTurnButton.class, "hb");
+                if (hb != null) {
+                    hb.clickStarted = false;
+                    hb.clicked = false;
+                }
+                suppressedClick = false;
+            }
         }
     }
 

@@ -1,6 +1,6 @@
 # STS1 Portrait
 
-Slay the Spire 1 的竖屏布局模组。当前版本为 `0.9.0-preview.57`。
+Slay the Spire 1 的竖屏布局模组。当前版本为 `0.9.0-preview.59`。
 
 在 Steam 使用「With Mods」，启用 ModTheSpire、BaseMod 和本模组。Windows 默认横屏。打开「Mods → STS1 Portrait → Config」，启用「自适应竖屏」并重启即可切换。Amethyst Plus 使用「铺满全屏（竖屏）」启动。
 
