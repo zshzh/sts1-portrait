@@ -74,7 +74,7 @@ public final class PortraitCombatHud {
     private static final float GOLD_X = 0.228f;
     private static final float FLOOR_X = 0.359f;
     private static final float FLOOR_ICON_SIZE = 0.075f;
-    private static final float ASCENSION_X = 0.255f;
+    private static final float ASCENSION_X = 0.590f;
     private static final float MAP_X = 0.702f;
     private static final float DECK_X = 0.818f;
     private static final float SETTINGS_X = 0.94f;
@@ -176,8 +176,7 @@ public final class PortraitCombatHud {
     }
 
     private static float toolBaseY(Tool tool) {
-        float row = tool == Tool.ASCENSION ? runInfoY() : toolsY();
-        return Math.min(row, toolCeiling(tool) - toolHeight(tool) * .5f);
+        return Math.min(toolsY(), toolCeiling(tool) - toolHeight(tool) * .5f);
     }
 
     private static float toolCeiling(Tool tool) {
@@ -207,7 +206,7 @@ public final class PortraitCombatHud {
     private static float toolLeft(Tool tool) {
         switch (tool) {
             case FLOOR: return FLOOR_ICON_SIZE * 0.5f;
-            case ASCENSION: return 0.030f;
+            case ASCENSION: return 0.028f;
             default: return 0.054f;
         }
     }
@@ -216,8 +215,8 @@ public final class PortraitCombatHud {
         switch (tool) {
             case HEALTH: return 0.115f;
             case GOLD: return 0.104f;
+            case ASCENSION: return 0.058f;
             case FLOOR:
-            case ASCENSION:
             case DECK: return 0.073f;
             default: return 0.054f;
         }
@@ -243,7 +242,6 @@ public final class PortraitCombatHud {
 
     static float panelBottom() {
         float depth = showRunInfo() ? .092f : .043f;
-        if (AbstractDungeon.isAscensionMode) depth = .111f;
         return itemsY() - PortraitViewport.referenceWidth() * depth;
     }
 
@@ -594,22 +592,22 @@ public final class PortraitCombatHud {
         float y = toolY(tool);
         float width = toolUnit(tool);
         boolean floor = tool == Tool.FLOOR;
-        float size = width * (floor ? FLOOR_ICON_SIZE : 0.047f);
+        float size = width * (floor ? FLOOR_ICON_SIZE : 0.058f);
         batch.draw(image, x - size * 0.5f, y - size * 0.5f, size, size);
-        float fontScale = (floor ? GOLD_ICON_SCALE : HUD_NUMBER_SCALE) * toolScale(tool);
-        drawNumberAt(batch, value, x + width * (floor ? 0.045f : 0.034f), y, color, fontScale);
+        float fontScale = GOLD_ICON_SCALE * toolScale(tool);
+        drawNumberAt(batch, value, x + width * (floor ? 0.045f : 0.036f), y, color, fontScale);
     }
 
     private static void drawRunInfo(SpriteBatch batch) {
         batch.setColor(Color.WHITE);
         float width = PortraitViewport.referenceWidth();
         float y = runInfoY();
-        if (showClock()) drawClock(batch, y, hasRunIcons() || AbstractDungeon.isAscensionMode);
+        if (showClock()) drawClock(batch, y, hasRunIcons());
         ArrayList<AbstractDailyMod> mods = ModHelper.enabledMods;
         ArrayList<AbstractBlight> blights = AbstractDungeon.player.blights;
         int count = mods.size() + blights.size();
         if (count == 0) return;
-        float start = AbstractDungeon.isAscensionMode ? .34f : showClock() ? .31f : .03f;
+        float start = showClock() ? .31f : .03f;
         float step = Math.min(0.075f, (0.98f - start) / count);
         float size = Math.min(width * 0.049f, step * width * 0.86f);
         for (int i = 0; i < mods.size(); i++) {
@@ -750,10 +748,16 @@ public final class PortraitCombatHud {
         return active();
     }
 
+    private static float arenaEnemyScale() {
+        float w = Math.max(1f, PortraitViewport.contentWidth());
+        float arena = PortraitBattle.enemyArenaHeight();
+        return MathUtils.clamp((float) Math.sqrt(arena / (w * 0.80f)), 0.60f, 1.0f);
+    }
+
     private static float bodyScale(AbstractCreature creature) {
         if (creature instanceof AbstractPlayer) return 1.43f;
         float previewScale = Math.max(1.12f, Math.min(1.65f, 1.08f + 58f / Math.max(1f, creature.hb.height)));
-        return SlimeSplitLayout.fitBody(creature, previewScale * ENEMY_SCALE)
+        return SlimeSplitLayout.fitBody(creature, previewScale * ENEMY_SCALE * arenaEnemyScale())
                 * AwakenedFormation.bodyScale(creature) * PortraitFinalAct.bodyScale(creature);
     }
 
@@ -765,6 +769,7 @@ public final class PortraitCombatHud {
     public static final class BodyTop {
         long sampleAfter;
         float offset = Float.NaN;
+        float textureReach = Float.NaN;
         float left = Float.NaN;
         float right = Float.NaN;
     }
@@ -794,7 +799,21 @@ public final class PortraitCombatHud {
         if (!(creature instanceof AbstractMonster)) return;
         float fraction = flipY ? 1f : textureTops.computeIfAbsent(texture, PortraitCombatHud::opaqueTop);
         float top = y + height * fraction;
-        IntentBounds.TOP.get((AbstractMonster) creature).offset = (top - creature.drawY) * bodyScale(creature);
+        float reach = top - creature.drawY;
+        BodyTop bounds = IntentBounds.TOP.get((AbstractMonster) creature);
+        bounds.textureReach = reach;
+        float scale = fittedTextureScale(creature, reach);
+        bounds.offset = reach * scale;
+    }
+
+    private static float fittedTextureScale(AbstractCreature creature, float reach) {
+        float scale = bodyScale(creature);
+        if (creature instanceof AbstractMonster && Float.isFinite(reach) && reach > 0f) {
+            float margin = PortraitViewport.referenceWidth() * .072f;
+            float room = panelBottom() - creature.drawY - margin;
+            if (room > 0f) scale = Math.min(scale, Math.max(.35f, room / reach));
+        }
+        return scale;
     }
 
     private static float opaqueTop(Texture texture) {
@@ -817,15 +836,16 @@ public final class PortraitCombatHud {
         float x = skeleton.getX();
         float y = skeleton.getY();
         float scale = bodyScale(creature);
-        if (creature instanceof CorruptHeart) {
+        if (creature instanceof AbstractMonster) {
             skeleton.getBounds(boundsOffset, boundsSize);
             float reach = boundsOffset.y + boundsSize.y - y;
             if (Float.isFinite(reach) && reach > 0f) {
-                float room = panelBottom() - y - PortraitViewport.referenceWidth() * .045f;
-                scale = Math.min(scale, Math.max(.10f, room / reach));
+                float margin = PortraitViewport.referenceWidth() * (creature instanceof CorruptHeart ? .045f : .072f);
+                float room = panelBottom() - y - margin;
+                if (room > 0f) scale = Math.min(scale, Math.max(.35f, room / reach));
             }
+            captureBodyTop((AbstractMonster) creature, skeleton, scale);
         }
-        if (creature instanceof AbstractMonster) captureBodyTop((AbstractMonster) creature, skeleton, scale);
         poseOriginal.set(batch.getTransformMatrix());
         poseScaled.set(poseOriginal).translate(x, y, 0).scale(scale, scale, 1f).translate(-x, -y, 0);
         batch.setTransformMatrix(poseScaled);
@@ -837,7 +857,10 @@ public final class PortraitCombatHud {
     }
 
     public static void beginBodyTexture(AbstractCreature creature, SpriteBatch batch) {
-        float scale = bodyScale(creature);
+        float reach = creature instanceof AbstractMonster
+                ? IntentBounds.TOP.get((AbstractMonster) creature).textureReach
+                : Float.NaN;
+        float scale = fittedTextureScale(creature, reach);
         transform(batch, creature.drawX, creature.drawY, creature.drawX, creature.drawY, scale);
     }
 
@@ -870,10 +893,21 @@ public final class PortraitCombatHud {
         }
     }
 
+    private static float hexaghostScale(Hexaghost boss) {
+        float scale = ENEMY_SCALE * arenaEnemyScale();
+        float centerY = boss.drawY + 105f * Settings.scale;
+        float halfReach = 177f * Settings.scale;
+        float room = panelBottom() - centerY - PortraitViewport.referenceWidth() * .072f;
+        if (room > 0f && halfReach > 0f) {
+            scale = Math.min(scale, Math.max(.55f, room / halfReach));
+        }
+        return scale;
+    }
+
     public static void drawHexaghostBody(Hexaghost boss, HexaghostBody body, SpriteBatch batch) {
         float x = boss.drawX;
         float centerY = boss.drawY + 105f * Settings.scale;
-        transform(batch, x, centerY, x, centerY, ENEMY_SCALE);
+        transform(batch, x, centerY, x, centerY, hexaghostScale(boss));
         try {
             body.render(batch);
         } finally {
@@ -919,7 +953,9 @@ public final class PortraitCombatHud {
     }
 
     private static float visibleBodyTop(AbstractMonster monster) {
-        if (monster instanceof Hexaghost) return monster.drawY + 282f * Settings.scale;
+        if (monster instanceof Hexaghost) {
+            return monster.drawY + (105f + 177f * hexaghostScale((Hexaghost) monster)) * Settings.scale;
+        }
         float offset = IntentBounds.TOP.get(monster).offset;
         return Float.isNaN(offset)
                 ? monster.hb.y + monster.hb.height * bodyScale(monster)

@@ -136,8 +136,11 @@ public final class PortraitEnemyDetails {
                     }
                 }
             }
-            float upperLimit = PortraitViewport.y(0.86f);
-            float lowerLimit = PortraitViewport.y(player ? 0.43f : 0.40f);
+            float upperLimit = PortraitCombatHud.topBarActive()
+                    ? PortraitCombatHud.panelBottom() - width * 0.02f
+                    : PortraitViewport.y(0.86f);
+            float lowerLimit = Math.min(PortraitViewport.y(player ? 0.43f : 0.40f),
+                    PortraitBattle.battleHandTop() + width * 0.03f);
             float fit = Math.min(1f, (upperLimit - lowerLimit) / Math.max(1f, panelHeight));
             float top = Math.min(upperLimit, Math.max(preferredTop, lowerLimit + panelHeight * fit));
             float bottom = top - panelHeight;

@@ -53,7 +53,8 @@ public final class PortraitOrbSlots {
 
     static float top() {
         float width = PortraitViewport.contentWidth();
-        float top = PortraitBattle.playerBattleY() + width * .145f;
+        float topFraction = 0.105f + 0.040f * PortraitBattle.heightFactor();
+        float top = PortraitBattle.playerBattleY() + width * topFraction;
         if (AbstractDungeon.getMonsters() == null) return top;
         for (AbstractMonster monster : AbstractDungeon.getMonsters().monsters) {
             if (monster.isDeadOrEscaped() || monster.halfDead || monster.isDying) continue;

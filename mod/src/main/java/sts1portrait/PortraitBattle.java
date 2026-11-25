@@ -23,6 +23,8 @@ public final class PortraitBattle {
     private static final float COLUMN_PITCH = 0.183f;
     private static final float CARD_ROW_GAP = 0.023f;
     private static final float HAND_HUD_GAP = 0.167f;
+    private static final float BASE_ASPECT = 2.05f;
+    private static final float MIN_ASPECT = 1.25f;
     private static final int CARDS_PER_ROW = 5;
     // Match the apparent gaps between icons, including the two pile counters.
     private static final float[] BOTTOM_CONTROL_X = { .095f, .240f, .500f, .765f, .905f };
@@ -53,16 +55,33 @@ public final class PortraitBattle {
                 && AbstractDungeon.player != null && AbstractDungeon.player.hand == group;
     }
 
+    static float heightFactor() {
+        float w = Math.max(1f, PortraitViewport.contentWidth());
+        float aspect = PortraitViewport.contentHeight() / w;
+        if (aspect >= BASE_ASPECT) return 1f;
+        return Math.max(0f, (aspect - MIN_ASPECT) / (BASE_ASPECT - MIN_ASPECT));
+    }
+
+    private static float blend(float compact, float tall) {
+        float t = heightFactor();
+        return compact + (tall - compact) * t;
+    }
+
     private static float fixedHandScale() {
         float width = Math.min(PortraitViewport.referenceCanvasWidth() * CARD_WIDTH,
                 Settings.WIDTH * (COLUMN_PITCH - MIN_CARD_GAP));
-        return width / AbstractCard.IMG_WIDTH;
+        float byWidth = width / AbstractCard.IMG_WIDTH;
+        float maxCardHeight = PortraitViewport.contentHeight() * 0.134f;
+        float byHeight = maxCardHeight / AbstractCard.IMG_HEIGHT;
+        return Math.min(byWidth, byHeight);
     }
 
     private static float handY(int row, float cardHeight) {
         float width = PortraitViewport.referenceWidth();
-        return handAnchorY() + width * HAND_HUD_GAP - handDrop() + cardHeight * 0.5f
-                + (1 - row) * (cardHeight + width * CARD_ROW_GAP);
+        float hudGap = blend(0.118f, HAND_HUD_GAP);
+        float rowGap = blend(0.014f, CARD_ROW_GAP);
+        return handAnchorY() + width * hudGap - handDrop() + cardHeight * 0.5f
+                + (1 - row) * (cardHeight + width * rowGap);
     }
 
     static void layoutHand(CardGroup hand) {
@@ -202,7 +221,11 @@ public final class PortraitBattle {
         float minEnemyWidth = Math.min(width * 0.28f, unit * (monsters.size() <= 2 ? 0.24f : 0.19f));
         boolean shortDrag = monsters.size() <= 2;
         int rowLimit = monsters.size() == 4 ? 2 : 3;
-        float baseline = enemyBaseline();
+
+        // First partition monsters into rows so vertical placement can fit cleanly within the real arena bounds.
+        ArrayList<Integer> rowEnds = new ArrayList<>();
+        ArrayList<Float> rowWidths = new ArrayList<>();
+        ArrayList<Float> rowHeights = new ArrayList<>();
         int start = 0;
         while (start < monsters.size()) {
             int end = start;
@@ -219,6 +242,20 @@ public final class PortraitBattle {
                 rowHeight = Math.max(rowHeight, 1.35f * enemy.hb.height + enemy.intentHb.height);
                 end++;
             }
+            rowEnds.add(end);
+            rowWidths.add(rowWidth);
+            rowHeights.add(rowHeight);
+            start = end;
+        }
+
+        int totalRows = rowEnds.size();
+        float baseline = enemyBaseline(totalRows);
+        float maxStep = maxMultiRowStep(baseline, totalRows);
+        start = 0;
+        for (int r = 0; r < totalRows; r++) {
+            int end = rowEnds.get(r);
+            float rowWidth = rowWidths.get(r);
+            float rowHeight = rowHeights.get(r);
             float x = PortraitViewport.x(0.5f) - rowWidth * 0.5f;
             boolean stagger = monsters.size() == 4 && start == 2 && end - start == 2;
             for (int index = start; index < end; index++) {
@@ -234,14 +271,55 @@ public final class PortraitBattle {
                 positionEnemy(enemy, centerX, baseline, unit);
                 x += enemyWidth + gap;
             }
-            // Leave room above the lower intents for the upper row's health and powers.
-            baseline += shortDrag ? width * .22f : Math.max(width * .40f, rowHeight + width * .255f);
+            // Leave room above the lower intents for the upper row's health and powers, clamped to the arena ceiling.
+            float desiredStep = shortDrag ? width * .22f : Math.max(width * .40f, rowHeight + width * .255f);
+            baseline += Math.min(desiredStep, maxStep);
             start = end;
         }
     }
 
+    static float enemyArenaFloor() {
+        float w = PortraitViewport.contentWidth();
+        return playerBattleY() + w * blend(0.175f, 0.235f);
+    }
+
+    static float enemyArenaCeiling() {
+        float topBar = PortraitCombatHud.topBarActive()
+                ? PortraitCombatHud.panelBottom()
+                : PortraitViewport.y(0.88f);
+        return topBar - PortraitViewport.referenceWidth() * 0.075f;
+    }
+
+    static float enemyArenaHeight() {
+        return Math.max(PortraitViewport.contentWidth() * 0.18f, enemyArenaCeiling() - enemyArenaFloor());
+    }
+
     static float enemyBaseline() {
-        return formationHandTop() + PortraitViewport.referenceWidth() * .13f + PortraitViewport.contentWidth() * .226f;
+        return enemyBaseline(1);
+    }
+
+    static float enemyBaseline(int rows) {
+        float tallBaseline = formationHandTop() + PortraitViewport.referenceWidth() * .13f
+                + PortraitViewport.contentWidth() * .226f;
+        float floor = enemyArenaFloor();
+        float ceiling = enemyArenaCeiling();
+        float arena = Math.max(PortraitViewport.contentWidth() * 0.18f, ceiling - floor);
+        if (heightFactor() >= 1f) {
+            float maxSafe = ceiling - PortraitViewport.contentWidth() * (rows > 1 ? 0.56f : 0.34f);
+            return Math.max(floor, Math.min(tallBaseline, maxSafe));
+        }
+        float riseFraction = rows > 1 ? blend(0.0f, 0.08f) : blend(0.04f, 0.14f);
+        float adaptive = floor + arena * riseFraction;
+        return Math.min(tallBaseline, adaptive);
+    }
+
+    static float maxMultiRowStep(float lowerBaseline, int rows) {
+        if (rows <= 1) return Float.POSITIVE_INFINITY;
+        float w = PortraitViewport.contentWidth();
+        float ceiling = enemyArenaCeiling();
+        float arena = enemyArenaHeight();
+        float topAllowance = Math.min(arena * 0.50f, w * blend(0.20f, 0.32f));
+        return Math.max(w * 0.16f, (ceiling - lowerBaseline - topAllowance) / (rows - 1));
     }
 
     static void positionEnemy(AbstractMonster enemy, float centerX, float baseline, float unit) {
@@ -311,11 +389,11 @@ public final class PortraitBattle {
     }
 
     static float playerFormationY() {
-        return formationHandTop() + PortraitViewport.referenceWidth() * .098f;
+        return formationHandTop() + PortraitViewport.referenceWidth() * blend(0.082f, .098f);
     }
 
     private static float handDrop() {
-        return Math.min(PortraitViewport.referenceWidth(), PortraitViewport.contentWidth()) * .09f;
+        return Math.min(PortraitViewport.referenceWidth(), PortraitViewport.contentWidth()) * blend(0.062f, .09f);
     }
 
     static float playerHudDrop() {
@@ -327,13 +405,13 @@ public final class PortraitBattle {
     }
 
     private static float handAnchorY() {
-        // Lift the combat lower zone cleanly above the OS bottom gesture bar while keeping the 5-slot layout intact.
-        return PortraitViewport.y(0) + PortraitViewport.referenceWidth() * 0.128f;
+        // Lift the combat lower zone cleanly above the OS bottom gesture bar while adapting smoothly on wider tablets.
+        return PortraitViewport.y(0) + PortraitViewport.referenceWidth() * blend(0.088f, 0.128f);
     }
 
     private static float hudY() {
         float width = PortraitViewport.referenceWidth();
-        return Math.max(width * .108f, handAnchorY() - width * .044f);
+        return Math.max(width * blend(0.072f, .108f), handAnchorY() - width * blend(0.032f, .044f));
     }
 
     static float bottomControlX(int slot) {

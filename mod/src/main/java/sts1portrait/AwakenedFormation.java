@@ -35,10 +35,11 @@ final class AwakenedFormation {
 
         float width = PortraitViewport.contentWidth();
         float unit = PortraitViewport.referenceWidth();
-        float lower = PortraitBattle.enemyBaseline();
+        float lower = PortraitBattle.enemyBaseline(2);
+        float rowStep = Math.min(width * .55f, PortraitBattle.maxMultiRowStep(lower, 2));
         PortraitBattle.positionEnemy(left, PortraitViewport.x(.265f), lower, unit);
         PortraitBattle.positionEnemy(right, PortraitViewport.x(.735f), lower, unit);
-        PortraitBattle.positionEnemy(boss, PortraitViewport.x(.49f), lower + width * .55f, unit);
+        PortraitBattle.positionEnemy(boss, PortraitViewport.x(.49f), lower + rowStep, unit);
         return true;
     }
 

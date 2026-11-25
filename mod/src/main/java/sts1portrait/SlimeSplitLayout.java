@@ -53,7 +53,8 @@ final class SlimeSplitLayout {
             if (!isSplitChild(monster)) return false;
         }
         float width = PortraitViewport.contentWidth();
-        float baseline = PortraitBattle.playerFormationY() + width * .128f;
+        float baseline = Math.min(PortraitBattle.playerFormationY() + width * .128f, PortraitBattle.enemyBaseline(2));
+        float rowStep = Math.min(width * .255f, PortraitBattle.maxMultiRowStep(baseline, 2));
         for (AbstractMonster monster : roster) {
             boolean acid = monster instanceof AcidSlime_L || monster instanceof AcidSlime_M;
             ArrayList<AbstractMonster> slots = acid ? acidSlots : spikeSlots;
@@ -63,7 +64,7 @@ final class SlimeSplitLayout {
                 row = slots.indexOf(monster) % 2;
             }
             PortraitBattle.positionEnemy(monster, PortraitViewport.x(acid ? .745f : .255f),
-                    baseline + row * width * .255f, PortraitViewport.referenceWidth());
+                    baseline + row * rowStep, PortraitViewport.referenceWidth());
         }
         return true;
     }
