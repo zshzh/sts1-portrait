@@ -91,9 +91,8 @@ public final class PortraitFonts {
         if (!PortraitViewport.active()) return FontHelper.tipHeaderFont;
         ensureFresh();
         if (headerFont == null) {
-            headerFont = generate(boldFile != null ? boldFile : regularFile, 78f,
-                    Math.max(1.1f, 1.6f * Settings.scale),
-                    new Color(0f, 0f, 0f, 0.56f), 2);
+            headerFont = generate(boldFile != null ? boldFile : regularFile, 108f,
+                    0f, new Color(0f, 0f, 0f, 0.62f), 3);
             if (headerFont == null) return FontHelper.tipHeaderFont;
         }
         return headerFont;

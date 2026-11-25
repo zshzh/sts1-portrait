@@ -24,7 +24,6 @@ import com.megacrit.cardcrawl.rooms.CampfireUI;
 import com.megacrit.cardcrawl.rewards.RewardItem;
 import com.megacrit.cardcrawl.screens.CardRewardScreen;
 import com.megacrit.cardcrawl.screens.CombatRewardScreen;
-import com.megacrit.cardcrawl.screens.GameOverScreen;
 import com.megacrit.cardcrawl.screens.SingleRelicViewPopup;
 import com.megacrit.cardcrawl.screens.mainMenu.MenuCancelButton;
 import com.megacrit.cardcrawl.screens.options.InputSettingsScreen;
@@ -209,7 +208,6 @@ public final class PortraitScreens {
     @SpirePatch(clz = CombatRewardScreen.class, method = "render", paramtypez = {SpriteBatch.class})
     @SpirePatch(clz = CardRewardScreen.class, method = "render", paramtypez = {SpriteBatch.class})
     @SpirePatch(clz = CampfireUI.class, method = "render", paramtypez = {SpriteBatch.class})
-    @SpirePatch(clz = GameOverScreen.class, method = "renderStatsScreen", paramtypez = {SpriteBatch.class})
     @SpirePatch(clz = SingleRelicViewPopup.class, method = "render", paramtypez = {SpriteBatch.class})
     public static class Drawing {
         @SpirePrefixPatch
@@ -338,7 +336,7 @@ public final class PortraitScreens {
         @SpirePrefixPatch
         public static SpireReturn<Void> before(Object __instance, SpriteBatch batch) {
             applied = false;
-            if (!enabled()) return SpireReturn.Continue();
+            if (!enabled() || PortraitSettlement.ownsReturnButton(__instance)) return SpireReturn.Continue();
             if (__instance instanceof ConfirmPopup && PortraitSettingsConfirm.usesSettingsStyle((ConfirmPopup) __instance)) {
                 PortraitSettingsConfirm.draw((ConfirmPopup) __instance, batch);
                 return SpireReturn.Return();
@@ -437,7 +435,8 @@ public final class PortraitScreens {
 
         @SpirePrefixPatch
         public static void before(Object __instance) {
-            applied = enabled() && !PortraitBossReward.isSkip(__instance);
+            applied = enabled() && !PortraitBossReward.isSkip(__instance)
+                    && !PortraitSettlement.ownsReturnButton(__instance);
             if (!applied) return;
             previousX = InputHelper.mX;
             previousY = InputHelper.mY;

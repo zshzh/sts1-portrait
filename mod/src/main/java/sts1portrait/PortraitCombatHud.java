@@ -748,6 +748,12 @@ public final class PortraitCombatHud {
         return active();
     }
 
+    public static boolean usesLargerSprites(Object creature) {
+        if (active()) return true;
+        return creature instanceof AbstractPlayer
+                && (OpeningPatches.neowActive() || PortraitEvents.roomSceneActive());
+    }
+
     private static float arenaEnemyScale() {
         float w = Math.max(1f, PortraitViewport.contentWidth());
         float arena = PortraitBattle.enemyArenaHeight();
@@ -878,10 +884,10 @@ public final class PortraitCombatHud {
                 public void edit(MethodCall call) throws CannotCompileException {
                     if (!"draw".equals(call.getMethodName())) return;
                     if (SkeletonMeshRenderer.class.getName().equals(call.getClassName())) {
-                        call.replace("{ if (sts1portrait.PortraitCombatHud.usesLargerSprites())"
+                        call.replace("{ if (sts1portrait.PortraitCombatHud.usesLargerSprites(this))"
                                 + " sts1portrait.PortraitCombatHud.drawBody(this, $0, $1, $2); else $proceed($$); }");
                     } else if (SpriteBatch.class.getName().equals(call.getClassName())) {
-                        call.replace("{ if (sts1portrait.PortraitCombatHud.usesLargerSprites()) {"
+                        call.replace("{ if (sts1portrait.PortraitCombatHud.usesLargerSprites(this)) {"
                                 + ("(Lcom/badlogic/gdx/graphics/Texture;FFFFIIIIZZ)V".equals(call.getSignature())
                                         ? " sts1portrait.PortraitCombatHud.captureTextureTop(this, $1, $3, $5, $11);" : "")
                                 + " sts1portrait.PortraitCombatHud.beginBodyTexture(this, $0);"

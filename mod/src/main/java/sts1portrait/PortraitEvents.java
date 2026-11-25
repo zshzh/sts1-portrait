@@ -31,6 +31,8 @@ import com.megacrit.cardcrawl.helpers.ImageMaster;
 import com.megacrit.cardcrawl.helpers.TipHelper;
 import com.megacrit.cardcrawl.helpers.input.InputHelper;
 import com.megacrit.cardcrawl.relics.AbstractRelic;
+import com.megacrit.cardcrawl.rooms.AbstractRoom;
+import com.megacrit.cardcrawl.rooms.EventRoom;
 import com.megacrit.cardcrawl.rooms.VictoryRoom;
 import com.megacrit.cardcrawl.saveAndContinue.SaveFile;
 import com.megacrit.cardcrawl.ui.DialogWord;
@@ -122,6 +124,44 @@ public final class PortraitEvents {
     public static boolean roomStoryActive() {
         return PortraitScreens.enabled() && AbstractDungeon.currMapNode != null
                 && AbstractDungeon.getCurrRoom() != null && AbstractDungeon.getCurrRoom().event != null;
+    }
+
+    public static boolean roomSceneActive() {
+        if (!PortraitViewport.active() || AbstractDungeon.currMapNode == null) return false;
+        AbstractRoom room = AbstractDungeon.getCurrRoom();
+        return room instanceof EventRoom
+                && room.phase == AbstractRoom.RoomPhase.EVENT
+                && room.event != null
+                && AbstractEvent.type == AbstractEvent.EventType.ROOM
+                && !(room.event instanceof SpireHeart);
+    }
+
+    static void placeRoomEventPlayer() {
+        if (!roomSceneActive() || AbstractDungeon.player == null) return;
+        AbstractPlayer player = AbstractDungeon.player;
+        float x = PortraitViewport.x(0.24f);
+        int optCount = RoomEventDialog.optionList != null ? RoomEventDialog.optionList.size() : 0;
+        float minAboveOptions = optionsTop(optCount, true) + PortraitViewport.contentHeight() * 0.035f;
+        float y = Math.max(PortraitViewport.y(0.425f), minAboveOptions);
+        if (Math.abs(player.drawX - x) > 0.5f || Math.abs(player.drawY - y) > 0.5f) {
+            player.movePosition(x, y);
+        }
+    }
+
+    @SpirePatch(clz = EventRoom.class, method = "update", paramtypez = {})
+    public static class RoomEventPlayerUpdate {
+        @SpirePrefixPatch
+        public static void before(EventRoom __instance) {
+            placeRoomEventPlayer();
+        }
+    }
+
+    @SpirePatch(clz = EventRoom.class, method = "render", paramtypez = {SpriteBatch.class})
+    public static class RoomEventPlayerRender {
+        @SpirePrefixPatch
+        public static void before(EventRoom __instance, SpriteBatch sb) {
+            placeRoomEventPlayer();
+        }
     }
 
     private static float roomStoryScale() {

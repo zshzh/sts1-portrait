@@ -283,14 +283,37 @@ public final class OpeningPatches {
         }
     }
 
+    static void placeNeowPlayer() {
+        AbstractPlayer player = AbstractDungeon.player;
+        if (!PortraitViewport.active() || player == null) return;
+        float x = PortraitViewport.x(0.24f);
+        float y = PortraitViewport.y(0.425f);
+        if (Math.abs(player.drawX - x) > 0.5f || Math.abs(player.drawY - y) > 0.5f) {
+            player.movePosition(x, y);
+        }
+    }
+
     @SpirePatch(clz = NeowRoom.class, method = "onPlayerEntry", paramtypez = {})
     public static class NeowPlayer {
         @SpirePostfixPatch
         public static void postfix(NeowRoom __instance) {
-            AbstractPlayer player = AbstractDungeon.player;
-            if (PortraitViewport.active() && player != null) {
-                player.movePosition(PortraitViewport.x(0.22f), PortraitViewport.y(0.490f));
-            }
+            placeNeowPlayer();
+        }
+    }
+
+    @SpirePatch(clz = NeowRoom.class, method = "update", paramtypez = {})
+    public static class NeowPlayerUpdate {
+        @SpirePrefixPatch
+        public static void before(NeowRoom __instance) {
+            placeNeowPlayer();
+        }
+    }
+
+    @SpirePatch(clz = NeowRoom.class, method = "render", paramtypez = {SpriteBatch.class})
+    public static class NeowPlayerRender {
+        @SpirePrefixPatch
+        public static void before(NeowRoom __instance, SpriteBatch sb) {
+            placeNeowPlayer();
         }
     }
 
