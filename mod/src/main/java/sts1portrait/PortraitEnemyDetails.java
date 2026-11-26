@@ -88,15 +88,16 @@ public final class PortraitEnemyDetails {
         float titleCap = width * 0.030f;
         float labelCap = width * 0.0235f;
         float bodyCap = width * 0.0235f;
-        float titleToDivider = titleCap * 1.65f;
-        float dividerToBody = width * 0.022f;
-        float labelToBody = labelCap * 1.50f;
-        float tipGap = width * 0.026f;
+        float titleToDivider = titleCap * 1.72f;
+        float dividerToBody = width * 0.024f;
+        float labelToBody = labelCap * 1.68f;
+        float tipGap = Math.max(width * 0.030f, bodyCap * 1.28f);
 
         BitmapFont heading = PortraitFonts.header();
         BitmapFont body = PortraitFonts.body();
         float headingX = heading.getData().scaleX;
         float headingY = heading.getData().scaleY;
+        float headingBaseCap = Math.max(1f, heading.getCapHeight());
         boolean headingMarkup = heading.getData().markupEnabled;
         float packed = batch.getPackedColor();
 
@@ -120,7 +121,7 @@ public final class PortraitEnemyDetails {
             bodyHeights[i] = bh;
             if (i > 0) contentHeight += tipGap;
             if (tip.header != null && !tip.header.isEmpty()) contentHeight += labelToBody;
-            contentHeight += bh;
+            if (bh > 0f) contentHeight += bh + bodyCap * 0.20f;
         }
         float panelHeight = padTop + contentHeight + padBot;
 
@@ -170,7 +171,7 @@ public final class PortraitEnemyDetails {
             // Title
             float cursorY = top - padTop;
             String title = player ? ((AbstractPlayer) creature).getLocalizedCharacterName() : creature.name;
-            float titleScale = titleCap / Math.max(1f, heading.getCapHeight());
+            float titleScale = titleCap / headingBaseCap;
             heading.getData().markupEnabled = false;
             heading.getData().setScale(headingX * titleScale, headingY * titleScale);
             FontHelper.renderFontLeftTopAligned(batch, heading, title, x + padX, cursorY, Settings.CREAM_COLOR);
@@ -181,8 +182,8 @@ public final class PortraitEnemyDetails {
             batch.draw(ImageMaster.WHITE_SQUARE_IMG, x + padX, cursorY, textWidth, 2f);
             cursorY -= dividerToBody;
 
-            // Power tips
-            float labelScale = labelCap / Math.max(1f, heading.getCapHeight());
+            // Power tips (must scale against unmutated headingBaseCap, not post-title capHeight)
+            float labelScale = labelCap / headingBaseCap;
             for (int i = 0; i < validTips.size(); i++) {
                 PowerTip tip = validTips.get(i);
                 if (i > 0) {
@@ -194,7 +195,7 @@ public final class PortraitEnemyDetails {
                 if (tip.header != null && !tip.header.isEmpty()) {
                     float icon = labelCap * 1.24f;
                     float tx = x + padX;
-                    float iconBottom = cursorY - labelCap * 0.55f - icon * 0.5f;
+                    float iconBottom = cursorY - labelCap * 0.58f - icon * 0.5f;
                     batch.setColor(Color.WHITE);
                     if (tip.imgRegion != null) {
                         batch.draw(tip.imgRegion, tx, iconBottom, icon, icon);
@@ -213,7 +214,7 @@ public final class PortraitEnemyDetails {
                     tipBodies.get(i).drawTop(batch, body, tip.body, Settings.CREAM_COLOR,
                             x + padX, cursorY, textWidth, Math.max(bh + 12f, bodyCap * 2f),
                             bodyCap, Align.left, AbstractDungeon.player);
-                    cursorY -= bh;
+                    cursorY -= bh + bodyCap * 0.20f;
                 }
             }
         } finally {
