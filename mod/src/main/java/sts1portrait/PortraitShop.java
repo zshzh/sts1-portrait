@@ -71,26 +71,82 @@ public final class PortraitShop {
         public static SpireReturn<Void> before(ShopScreen __instance, float ___rugY) {
             if (!enabled()) return SpireReturn.Continue();
             IdentityHashMap<AbstractCard, Integer> slots = Slots.cards.get(__instance);
+            syncRestockedSlots(__instance, slots, ___rugY);
             update(__instance.coloredCards, slots, ___rugY);
             update(__instance.colorlessCards, slots, ___rugY);
             return SpireReturn.Return();
         }
 
+        private static float cardScale() {
+            float height = Math.min(PortraitViewport.referenceHeight(), PortraitViewport.contentHeight());
+            return Math.min(1.10f, Math.min(layoutWidth() * .255f / AbstractCard.IMG_WIDTH,
+                    height * .123f / AbstractCard.IMG_HEIGHT));
+        }
+
+        private static float slotX(int slot) {
+            return PortraitViewport.x(0.20f + (slot % 3) * 0.30f);
+        }
+
+        private static float slotY(int slot, float rugY) {
+            return PortraitViewport.y(0.775f - (slot / 3) * 0.151f) + slide(rugY);
+        }
+
+        private static void syncRestockedSlots(ShopScreen screen, IdentityHashMap<AbstractCard, Integer> slots,
+                                               float rugY) {
+            boolean[] used = new boolean[8];
+            for (AbstractCard card : screen.coloredCards) {
+                Integer slot = slots.get(card);
+                if (slot != null && slot >= 0 && slot < used.length) used[slot] = true;
+            }
+            for (AbstractCard card : screen.colorlessCards) {
+                Integer slot = slots.get(card);
+                if (slot != null && slot >= 0 && slot < used.length) used[slot] = true;
+            }
+            float scale = cardScale();
+            assignMissing(screen.coloredCards, slots, used, rugY, scale);
+            assignMissing(screen.colorlessCards, slots, used, rugY, scale);
+        }
+
+        private static void assignMissing(ArrayList<AbstractCard> cards, IdentityHashMap<AbstractCard, Integer> slots,
+                                          boolean[] used, float rugY, float scale) {
+            for (AbstractCard card : cards) {
+                if (slots.get(card) != null) continue;
+                int best = -1;
+                float bestDist = Float.POSITIVE_INFINITY;
+                for (int s = 0; s < used.length; s++) {
+                    if (used[s]) continue;
+                    float dx = card.current_x - slotX(s);
+                    float dy = card.current_y - slotY(s, rugY);
+                    float dist = dx * dx + dy * dy;
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        best = s;
+                    }
+                }
+                if (best >= 0) {
+                    used[best] = true;
+                    slots.put(card, best);
+                    card.drawScale = scale;
+                    card.targetDrawScale = scale;
+                }
+            }
+        }
+
         private static void update(ArrayList<AbstractCard> cards, IdentityHashMap<AbstractCard, Integer> slots,
                                    float rugY) {
-            float height = Math.min(PortraitViewport.referenceHeight(), PortraitViewport.contentHeight());
-            float scale = Math.min(1.10f, Math.min(layoutWidth() * .255f / AbstractCard.IMG_WIDTH,
-                    height * .123f / AbstractCard.IMG_HEIGHT));
+            float scale = cardScale();
             for (AbstractCard card : cards) {
                 Integer slot = slots.get(card);
                 if (slot != null) {
-                    card.target_x = card.current_x = PortraitViewport.x(0.20f + (slot % 3) * 0.30f);
-                    card.target_y = card.current_y = PortraitViewport.y(0.775f - (slot / 3) * 0.151f)
-                            + slide(rugY);
+                    card.target_x = card.current_x = slotX(slot);
+                    card.target_y = card.current_y = slotY(slot, rugY);
                     card.targetDrawScale = scale;
                 }
                 card.update();
                 card.updateHoverLogic();
+                if (slot != null) {
+                    card.targetDrawScale = card.hb.hovered ? Math.max(scale * 1.12f, 1.0f) : scale;
+                }
             }
         }
     }

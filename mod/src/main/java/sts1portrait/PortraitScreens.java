@@ -108,7 +108,6 @@ public final class PortraitScreens {
             float fitHeight = PortraitViewport.contentHeight() * .76f / (716f * Settings.scale);
             return Math.min(fixed, Math.min(fitWidth, fitHeight));
         }
-        if (screen instanceof InputSettingsScreen) return 1.44f * safeWidthRatio;
         if (screen instanceof CardRewardScreen) {
             ArrayList<AbstractCard> cards = ((CardRewardScreen) screen).rewardGroup;
             int count = cards == null ? 3 : cards.size();
@@ -161,9 +160,6 @@ public final class PortraitScreens {
             float targetCenter = PortraitViewport.x(0.965f) - 165f * Settings.scale * scale - 6f;
             return targetCenter - originalCenter * scale;
         }
-        if (screen instanceof InputSettingsScreen) {
-            return PortraitViewport.x(0.5f) - Settings.WIDTH * 0.5f * scale;
-        }
         if (screen instanceof CampfireUI) {
             return PortraitViewport.x(0.5f) - PortraitViewport.referenceCanvasWidth() * 0.5f * scale;
         }
@@ -188,9 +184,6 @@ public final class PortraitScreens {
         }
         if (screen instanceof ReturnToMenuButton) return PortraitViewport.y(0.012f);
         if (screen instanceof CardSelectConfirmButton) return PortraitBattle.endTurnY(0) - 475f * Settings.scale * scale;
-        if (screen instanceof InputSettingsScreen) {
-            return PortraitViewport.y(0.58f) - Settings.OPTION_Y * scale;
-        }
         if (screen instanceof CampfireUI) {
             return PortraitViewport.y(0.54f) - PortraitViewport.referenceCanvasHeight() * 0.5f * scale;
         }
@@ -204,7 +197,6 @@ public final class PortraitScreens {
         return PortraitViewport.y(0.02f) + 94f * Settings.scale * scale + 6f;
     }
 
-    @SpirePatch(clz = InputSettingsScreen.class, method = "render", paramtypez = {SpriteBatch.class})
     @SpirePatch(clz = CombatRewardScreen.class, method = "render", paramtypez = {SpriteBatch.class})
     @SpirePatch(clz = CardRewardScreen.class, method = "render", paramtypez = {SpriteBatch.class})
     @SpirePatch(clz = CampfireUI.class, method = "render", paramtypez = {SpriteBatch.class})
@@ -345,6 +337,10 @@ public final class PortraitScreens {
                 PortraitCharacterSelect.drawBack((MenuCancelButton) __instance, batch);
                 return SpireReturn.Return();
             }
+            if (PortraitSettings.isSettingsBack(__instance)) {
+                PortraitSettings.drawSettingsBack(__instance, batch);
+                return SpireReturn.Return();
+            }
             // Landscape hides these sprites by moving them past the original screen edge.
             if (hiddenCornerButton(__instance)) return SpireReturn.Return();
             previous.set(batch.getTransformMatrix());
@@ -391,7 +387,6 @@ public final class PortraitScreens {
         }
     }
 
-    @SpirePatch(clz = InputSettingsScreen.class, method = "update", paramtypez = {})
     @SpirePatch(clz = CombatRewardScreen.class, method = "update", paramtypez = {})
     @SpirePatch(clz = CardRewardScreen.class, method = "update", paramtypez = {})
     @SpirePatch(clz = CampfireUI.class, method = "update", paramtypez = {})
@@ -448,6 +443,10 @@ public final class PortraitScreens {
             }
             if (PortraitCharacterSelect.isBack(__instance)) {
                 PortraitCharacterSelect.mapBack((MenuCancelButton) __instance, x, y);
+                return;
+            }
+            if (PortraitSettings.isSettingsBack(__instance)) {
+                PortraitSettings.mapSettingsBack(__instance, x, y);
                 return;
             }
             layout.set(__instance);

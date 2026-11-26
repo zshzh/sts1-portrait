@@ -79,17 +79,6 @@ public final class PortraitTouchControls {
             .74f, .34f, .44f, .105f);
     private static final Control REWARD_SKIP = new Control("reward-skip-with-bowl", "Skip card reward", "跳过卡牌奖励",
             .26f, .34f, .44f, .105f);
-    private static final Control RESET = new Control("input-settings-reset", "Reset key bindings", "重置按键",
-            .50f, .36f, .42f, .087f);
-    private static final Control CONTROLLER = new Control("input-settings-controller", "Controller toggle", "控制器开关",
-            .265f, .30f, .44f, .087f);
-    private static final Control TOUCH = new Control("input-settings-touch", "Touch mode toggle", "触屏模式开关",
-            .735f, .30f, .44f, .087f);
-    private static final Control GAME_TAB = new Control("input-settings-game-tab", "Game settings tab", "游戏设置入口",
-            .265f, 0f, .376f, .09f);
-    private static final Matrix4 settingsPrevious = new Matrix4();
-    private static final Rectangle inputListClip = new Rectangle();
-    private static boolean inputListClipped;
     private static final Matrix4 worldPrevious = new Matrix4();
     private static final Matrix4 fireTransform = new Matrix4();
     private static final float[] edgeFade = {
@@ -116,20 +105,12 @@ public final class PortraitTouchControls {
             this.height = height;
         }
 
-        boolean isSettingsControl() {
-            return this == RESET || this == CONTROLLER || this == TOUCH || this == GAME_TAB;
-        }
-
         float centerX() {
-            float center = this == GAME_TAB ? PortraitViewport.x(.5f) - PortraitSettings.panelWidth() * PortraitSettings.TAB_OFFSET
-                    : PortraitViewport.x(x);
-            return center;
+            return PortraitViewport.x(x);
         }
 
         float centerY() {
-            float center = this == GAME_TAB ? PortraitSettings.panelTop() - PortraitSettings.rowHeight() * .62f
-                    : PortraitViewport.y(y);
-            return center;
+            return PortraitViewport.y(y);
         }
 
         float size(float fraction) {
@@ -139,11 +120,11 @@ public final class PortraitTouchControls {
         }
 
         float controlWidth() {
-            return this == GAME_TAB ? PortraitSettings.panelWidth() * PortraitSettings.TAB_WIDTH : size(width);
+            return size(width);
         }
 
         float controlHeight() {
-            return this == GAME_TAB ? PortraitSettings.rowHeight() * PortraitSettings.TAB_HEIGHT : size(height);
+            return size(height);
         }
 
         void map(Hitbox hitbox) {
@@ -192,12 +173,9 @@ public final class PortraitTouchControls {
             batch.setTransformMatrix(PortraitScreens.baseMatrix(batch));
 
             try {
-                boolean inSettings = isSettingsControl();
-                float border = inSettings ? 0 : h * .036f;
-                if (border > 0) PortraitDrawing.rectangle(batch, left, bottom, w, h, BORDER);
-                Color fill = inSettings ? (checked == null || hitbox.hovered ? PortraitSettings.ACTIVE : PortraitSettings.ROW)
-                        : (hitbox.hovered ? HOVER : SURFACE);
-                if (this == GAME_TAB) fill = hitbox.hovered ? PortraitSettings.ACTIVE : PortraitSettings.ROW;
+                float border = h * .036f;
+                PortraitDrawing.rectangle(batch, left, bottom, w, h, BORDER);
+                Color fill = hitbox.hovered ? HOVER : SURFACE;
                 if (this == PEEK && PeekButton.isPeeking) fill = HOVER;
                 PortraitDrawing.rectangle(batch, left + border, bottom + border, w - 2 * border,
                         h - 2 * border, fill);
@@ -206,7 +184,7 @@ public final class PortraitTouchControls {
                     float side = w * .75f;
                     batch.draw(ImageMaster.PEEK_BUTTON, cx - side * .5f, cy - side * .5f, side, side);
                 } else if (checked == null) {
-                    PortraitSettings.label(batch, label, cx, cy, w * (this == GAME_TAB ? .83f : .86f), h * (this == GAME_TAB ? .30f : .36f), true);
+                    PortraitSettings.label(batch, label, cx, cy, w * .86f, h * .36f, true);
                 } else {
                     PortraitSettings.checkmark(batch, left + w * .87f, cy, h * .39f, checked);
                     PortraitSettings.label(batch, label, left + w * .07f, cy, w * .69f, h * .32f, false);
@@ -649,230 +627,5 @@ public final class PortraitTouchControls {
         edgeFade[6] = edgeFade[11] = top;
         edgeFade[1] = edgeFade[16] = bottom;
         batch.draw(ImageMaster.WHITE_SQUARE_IMG, edgeFade, 0, edgeFade.length);
-    }
-
-    private static Control toggle(GiantToggleButton button) {
-        return button.type == GiantToggleButton.ToggleType.CONTROLLER_ENABLED ? CONTROLLER : TOUCH;
-    }
-
-    public static void drawToggle(GiantToggleButton button, SpriteBatch batch) {
-        if (!PortraitScreens.enabled()) {
-            button.render(batch);
-            return;
-        }
-        Hitbox hitbox = ReflectionHacks.getPrivate(button, GiantToggleButton.class, "hb");
-        String label = ReflectionHacks.getPrivate(button, GiantToggleButton.class, "label");
-        toggle(button).draw(batch, hitbox, label, button.ticked);
-    }
-
-    public static void updateToggle(GiantToggleButton button) {
-        if (!PortraitScreens.enabled()) {
-            button.update();
-            return;
-        }
-        Control control = toggle(button);
-        control.map(ReflectionHacks.getPrivate(button, GiantToggleButton.class, "hb"));
-        try {
-            button.update();
-        } finally {
-            control.restorePointer();
-        }
-    }
-
-    public static void updateSettingsButton(InputSettingsScreen screen, Hitbox hitbox, HitboxListener listener) {
-        if (!PortraitScreens.enabled()) {
-            hitbox.encapsulatedUpdate(listener);
-            return;
-        }
-        Control control = hitbox == ReflectionHacks.getPrivate(screen, InputSettingsScreen.class, "resetButtonHb")
-                ? RESET : GAME_TAB;
-        control.map(hitbox);
-        try {
-            hitbox.encapsulatedUpdate(listener);
-        } finally {
-            control.restorePointer();
-        }
-    }
-
-    static float inputPanelBottom() { return PortraitViewport.y(.30f) - PortraitViewport.contentWidth() * .075f; }
-
-    private static class InputListBounds {
-        static final float BOTTOM = ReflectionHacks.getPrivateStatic(InputSettingsScreen.class, "SCROLL_CONTAINER_BOTTOM");
-        static final float TOP = ReflectionHacks.getPrivateStatic(InputSettingsScreen.class, "SCROLL_CONTAINER_TOP");
-    }
-
-    public static void drawInputFrame(SpriteBatch batch, Texture background) {
-        if (background != ImageMaster.INPUT_SETTINGS_BG) return;
-        float top = PortraitSettings.panelTop();
-        float bottom = inputPanelBottom();
-        float width = PortraitSettings.panelWidth();
-        float color = batch.getPackedColor();
-        settingsPrevious.set(batch.getTransformMatrix());
-        batch.setTransformMatrix(PortraitScreens.baseMatrix(batch));
-        PortraitSettings.frame(batch, PortraitViewport.x(.5f), top, width, top - bottom);
-        batch.setColor(color);
-        batch.setTransformMatrix(settingsPrevious);
-        float[] transform = batch.getTransformMatrix().val;
-        float listBottom = InputListBounds.BOTTOM * transform[Matrix4.M11] + transform[Matrix4.M13];
-        float listHeight = (InputListBounds.TOP - InputListBounds.BOTTOM) * transform[Matrix4.M11];
-        inputListClip.set(0f, listBottom, Settings.WIDTH, listHeight);
-        PortraitDesktopViewport.clip(inputListClip);
-        batch.flush();
-        inputListClipped = ScissorStack.pushScissors(inputListClip);
-    }
-
-    public static void endInputList(SpriteBatch batch) {
-        if (!inputListClipped) return;
-        batch.flush();
-        ScissorStack.popScissors();
-        inputListClipped = false;
-    }
-
-    private static boolean inputRowVisible(RemapInputElement row) {
-        float half = RemapInputElement.ROW_HEIGHT * .45f;
-        return row.hb.cY + half > InputListBounds.BOTTOM && row.hb.cY - half < InputListBounds.TOP;
-    }
-
-    public static void renderInputRow(RemapInputElement row, SpriteBatch batch) {
-        if (!PortraitScreens.enabled()) {
-            row.render(batch);
-            return;
-        }
-        if (!inputListClipped || !inputRowVisible(row)) return;
-        boolean hidden = row.isHidden;
-        row.isHidden = false;
-        try {
-            row.render(batch);
-        } finally {
-            row.isHidden = hidden;
-        }
-    }
-
-    public static void updateInputRow(RemapInputElement row) {
-        if (!PortraitScreens.enabled()) {
-            row.update();
-            return;
-        }
-        int y = InputHelper.mY;
-        row.isHidden = !inputRowVisible(row) && !row.hasInputFocus;
-        if (y < InputListBounds.BOTTOM || y >= InputListBounds.TOP) InputHelper.mY = -10000;
-        try {
-            row.update();
-        } finally {
-            InputHelper.mY = y;
-        }
-    }
-
-    @SpirePatch(clz = InputSettingsScreen.class, method = "renderHeader")
-    public static class InputHeader {
-        @SpirePrefixPatch
-        public static SpireReturn<Void> before(InputSettingsScreen __instance, SpriteBatch sb) {
-            if (!PortraitScreens.enabled()) return SpireReturn.Continue();
-            float color = sb.getPackedColor();
-            settingsPrevious.set(sb.getTransformMatrix());
-            sb.setTransformMatrix(PortraitScreens.baseMatrix(sb));
-            float width = PortraitSettings.panelWidth();
-            float titleX = PortraitViewport.x(.5f) + width * PortraitSettings.TAB_OFFSET;
-            PortraitSettings.activeTab(sb, InputSettingsScreen.TEXT[0], titleX, GAME_TAB.centerY(),
-                    GAME_TAB.controlWidth(), GAME_TAB.controlHeight());
-            sb.setColor(color);
-            sb.setTransformMatrix(settingsPrevious);
-            GAME_TAB.draw(sb, ReflectionHacks.getPrivate(__instance, InputSettingsScreen.class, "gameSettingsHb"),
-                    InputSettingsScreen.TEXT[1], null);
-            return SpireReturn.Return();
-        }
-    }
-
-    public static void drawKeyRow(SpriteBatch batch, RemapInputElement element, Texture texture,
-            float x, float y, float width, float height) {
-        if (!PortraitScreens.enabled()) {
-            batch.draw(texture, x, y, width, height);
-            return;
-        }
-        Color color = element.isHeader || element.hasInputFocus || element.hb.hovered
-                ? PortraitSettings.ACTIVE : PortraitSettings.ROW;
-        float rowHeight = RemapInputElement.ROW_HEIGHT;
-        PortraitDrawing.rectangle(batch, x, element.hb.cY - rowHeight * .45f, width, rowHeight * .90f, color);
-    }
-
-    public static void drawKeyText(SpriteBatch batch, BitmapFont font, String text, float x, float y, Color color,
-            int column) {
-        if (!PortraitScreens.enabled()) {
-            FontHelper.renderFont(batch, font, text, x, y, color);
-            return;
-        }
-        float width = (column == 0 ? 372f : column == 1 ? 222f : 310f) * Settings.scale;
-        PortraitSettings.label(batch, text, x, y - 12f * Settings.scale, width,
-                RemapInputElement.ROW_HEIGHT * .40f, false);
-    }
-
-    @SpirePatch(clz = RemapInputElement.class, method = "render")
-    public static class InputRow {
-        @SpireInstrumentPatch
-        public static ExprEditor instrument() {
-            return new ExprEditor() {
-                private int column;
-
-                @Override public void edit(MethodCall call) throws CannotCompileException {
-                    if (SpriteBatch.class.getName().equals(call.getClassName())) {
-                        if ("setBlendFunction".equals(call.getMethodName())) {
-                            call.replace("{ $proceed($1, sts1portrait.PortraitScreens.enabled() ? 771 : $2); }");
-                        } else if ("draw".equals(call.getMethodName())
-                                && "(Lcom/badlogic/gdx/graphics/Texture;FFFF)V".equals(call.getSignature())) {
-                            call.replace("{ sts1portrait.PortraitTouchControls.drawKeyRow($0, this, $$); }");
-                        }
-                    } else if (FontHelper.class.getName().equals(call.getClassName()) && "renderFont".equals(call.getMethodName())) {
-                        call.replace("{ sts1portrait.PortraitTouchControls.drawKeyText($$, " + column++ + "); }");
-                    }
-                }
-            };
-        }
-    }
-
-    @SpirePatch(clz = InputSettingsScreen.class, method = "renderResetDefaultButton")
-    public static class SettingsResetDrawing {
-        @SpirePrefixPatch
-        public static SpireReturn<Void> before(InputSettingsScreen __instance, SpriteBatch sb) {
-            if (!PortraitScreens.enabled()) return SpireReturn.Continue();
-            String label = InputSettingsScreen.TEXT[6];
-            RESET.draw(sb, ReflectionHacks.getPrivate(__instance, InputSettingsScreen.class, "resetButtonHb"),
-                    label, null);
-            return SpireReturn.Return();
-        }
-    }
-
-    @SpirePatch(clz = InputSettingsScreen.class, method = "render")
-    @SpirePatch(clz = InputSettingsScreen.class, method = "update")
-    public static class SettingsFooter {
-        @SpireInstrumentPatch
-        public static ExprEditor instrument() {
-            return new ExprEditor() {
-                @Override public void edit(MethodCall call) throws CannotCompileException {
-                    if (GiantToggleButton.class.getName().equals(call.getClassName())) {
-                        if ("render".equals(call.getMethodName())) {
-                            call.replace("{ sts1portrait.PortraitTouchControls.drawToggle($0, $1); }");
-                        } else if ("update".equals(call.getMethodName())) {
-                            call.replace("{ sts1portrait.PortraitTouchControls.updateToggle($0); }");
-                        }
-                    } else if (InputSettingsScreen.class.getName().equals(call.getClassName())
-                            && "renderFullscreenBackground".equals(call.getMethodName())) {
-                        call.replace("{ if (sts1portrait.PortraitScreens.enabled()) {"
-                                + " sts1portrait.PortraitTouchControls.drawInputFrame($1, $2); } else { $proceed($$); } }");
-                    } else if (InputSettingsScreen.class.getName().equals(call.getClassName())
-                            && "renderResetDefaultButton".equals(call.getMethodName())) {
-                        call.replace("{ sts1portrait.PortraitTouchControls.endInputList($1); $proceed($$); }");
-                    } else if (RemapInputElement.class.getName().equals(call.getClassName())) {
-                        if ("render".equals(call.getMethodName())) {
-                            call.replace("{ sts1portrait.PortraitTouchControls.renderInputRow($0, $1); }");
-                        } else if ("update".equals(call.getMethodName())) {
-                            call.replace("{ sts1portrait.PortraitTouchControls.updateInputRow($0); }");
-                        }
-                    } else if (Hitbox.class.getName().equals(call.getClassName())
-                            && "encapsulatedUpdate".equals(call.getMethodName())) {
-                        call.replace("{ sts1portrait.PortraitTouchControls.updateSettingsButton(this, $0, $1); }");
-                    }
-                }
-            };
-        }
     }
 }

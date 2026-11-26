@@ -1,12 +1,16 @@
 package sts1portrait;
 
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpireInstrumentPatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePostfixPatch;
 import com.evacipated.cardcrawl.modthespire.lib.SpirePrefixPatch;
 import com.megacrit.cardcrawl.core.Settings;
+import com.megacrit.cardcrawl.helpers.FontHelper;
 import com.megacrit.cardcrawl.helpers.ImageMaster;
 import com.megacrit.cardcrawl.helpers.input.InputHelper;
 import com.megacrit.cardcrawl.ui.panels.PotionPopUp;
@@ -18,6 +22,7 @@ import javassist.expr.MethodCall;
 public final class PortraitPopupMenus {
     private static final PopupPlacement POTIONS = new PopupPlacement();
     private static final Pointer POTION_POINTER = new Pointer();
+    private static final GlyphLayout potionLabelLayout = new GlyphLayout();
     private static boolean drawingPotion;
 
     private PortraitPopupMenus() {}
@@ -64,6 +69,9 @@ public final class PortraitPopupMenus {
                                 + " $2 + 200f, $3 + 169f)) $proceed($1, $2, $3 + "
                                 + "sts1portrait.PortraitPopupMenus.potionHighlightOffset($1), "
                                 + "$4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16); }");
+                    } else if (FontHelper.class.getName().equals(call.getClassName())
+                            && "renderFontCenteredWidth".equals(call.getMethodName())) {
+                        call.replace("{ sts1portrait.PortraitPopupMenus.drawCrispPotionLabel($$); }");
                     }
                 }
             };
@@ -92,6 +100,31 @@ public final class PortraitPopupMenus {
     static float potionMenuBottom(float y) { return POTIONS.mapY(y - 169f * Settings.scale); }
     static float potionMenuTop(float y) { return POTIONS.mapY(y + 169f * Settings.scale); }
     static float potionRowOffset() { return Sts2Preview.compact() ? 32f * Settings.scale : 0f; }
+
+    public static void drawCrispPotionLabel(SpriteBatch batch, BitmapFont origFont, String msg,
+            float x, float y, Color color) {
+        if (!drawingPotion) {
+            FontHelper.renderFontCenteredWidth(batch, origFont, msg, x, y, color);
+            return;
+        }
+        BitmapFont crisp = PortraitFonts.header();
+        float oldX = crisp.getData().scaleX;
+        float oldY = crisp.getData().scaleY;
+        boolean oldMarkup = crisp.getData().markupEnabled;
+        crisp.getData().markupEnabled = false;
+        float targetCap = 24f * Settings.scale;
+        float maxW = 240f * Settings.scale;
+        potionLabelLayout.setText(crisp, msg);
+        float fit = Math.min(maxW / Math.max(1f, potionLabelLayout.width),
+                targetCap / Math.max(1f, crisp.getCapHeight()));
+        crisp.getData().setScale(oldX * fit, oldY * fit);
+        try {
+            FontHelper.renderFontCenteredWidth(batch, crisp, msg, x, y + 6f * Settings.scale, color);
+        } finally {
+            crisp.getData().markupEnabled = oldMarkup;
+            crisp.getData().setScale(oldX, oldY);
+        }
+    }
 
     public static float potionHighlightOffset(Texture texture) {
         return drawingPotion && (texture == ImageMaster.POTION_UI_TOP || texture == ImageMaster.POTION_UI_BOT)

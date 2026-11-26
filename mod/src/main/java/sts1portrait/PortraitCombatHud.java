@@ -42,6 +42,10 @@ import com.megacrit.cardcrawl.monsters.AbstractMonster;
 import com.megacrit.cardcrawl.monsters.ending.CorruptHeart;
 import com.megacrit.cardcrawl.monsters.exordium.Hexaghost;
 import com.megacrit.cardcrawl.monsters.exordium.HexaghostBody;
+import com.megacrit.cardcrawl.monsters.exordium.HexaghostOrb;
+import com.megacrit.cardcrawl.vfx.GhostlyFireEffect;
+import com.megacrit.cardcrawl.vfx.GhostlyWeakFireEffect;
+import javassist.expr.NewExpr;
 import com.megacrit.cardcrawl.ui.panels.TopPanel;
 import com.megacrit.cardcrawl.ui.panels.DrawPilePanel;
 import com.megacrit.cardcrawl.ui.panels.DiscardPilePanel;
@@ -802,7 +806,7 @@ public final class PortraitCombatHud {
     }
 
     public static void captureTextureTop(AbstractCreature creature, Texture texture, float y, float height, boolean flipY) {
-        if (!(creature instanceof AbstractMonster)) return;
+        if (!(creature instanceof AbstractMonster) || creature instanceof Hexaghost) return;
         float fraction = flipY ? 1f : textureTops.computeIfAbsent(texture, PortraitCombatHud::opaqueTop);
         float top = y + height * fraction;
         float reach = top - creature.drawY;
@@ -863,6 +867,12 @@ public final class PortraitCombatHud {
     }
 
     public static void beginBodyTexture(AbstractCreature creature, SpriteBatch batch) {
+        if (creature instanceof Hexaghost) {
+            Hexaghost boss = (Hexaghost) creature;
+            float s = hexaghostScale(boss);
+            transform(batch, boss.drawX, hexaghostSourceY(boss), boss.drawX, hexaghostTargetY(boss, s), s);
+            return;
+        }
         float reach = creature instanceof AbstractMonster
                 ? IntentBounds.TOP.get((AbstractMonster) creature).textureReach
                 : Float.NaN;
@@ -899,25 +909,78 @@ public final class PortraitCombatHud {
         }
     }
 
+    private static Hexaghost updatingHexaghost;
+
+    private static float hexaghostSourceY(Hexaghost boss) {
+        return boss.drawY + 256f * Settings.scale;
+    }
+
     private static float hexaghostScale(Hexaghost boss) {
-        float scale = ENEMY_SCALE * arenaEnemyScale();
-        float centerY = boss.drawY + 105f * Settings.scale;
-        float halfReach = 177f * Settings.scale;
-        float room = panelBottom() - centerY - PortraitViewport.referenceWidth() * .072f;
-        if (room > 0f && halfReach > 0f) {
-            scale = Math.min(scale, Math.max(.55f, room / halfReach));
+        float scale = 1.55f * arenaEnemyScale();
+        float totalReach = 385f * Settings.scale;
+        float room = panelBottom() - boss.drawY - PortraitViewport.referenceWidth() * .085f;
+        if (room > 0f && totalReach > 0f) {
+            scale = Math.min(scale, Math.max(.60f, room / totalReach));
         }
         return scale;
     }
 
+    private static float hexaghostTargetY(Hexaghost boss, float scale) {
+        return boss.drawY + 205f * Settings.scale * scale;
+    }
+
     public static void drawHexaghostBody(Hexaghost boss, HexaghostBody body, SpriteBatch batch) {
         float x = boss.drawX;
-        float centerY = boss.drawY + 105f * Settings.scale;
-        transform(batch, x, centerY, x, centerY, hexaghostScale(boss));
+        float s = hexaghostScale(boss);
+        transform(batch, x, hexaghostSourceY(boss), x, hexaghostTargetY(boss, s), s);
         try {
             body.render(batch);
         } finally {
             batch.setTransformMatrix(original);
+        }
+    }
+
+    public static float hexaghostOrbX(float rawX) {
+        if (updatingHexaghost == null || !active()) return rawX;
+        float s = hexaghostScale(updatingHexaghost);
+        return updatingHexaghost.drawX + (rawX - updatingHexaghost.drawX) * s;
+    }
+
+    public static float hexaghostOrbY(float rawY) {
+        if (updatingHexaghost == null || !active()) return rawY;
+        float s = hexaghostScale(updatingHexaghost);
+        return hexaghostTargetY(updatingHexaghost, s) + (rawY - hexaghostSourceY(updatingHexaghost)) * s;
+    }
+
+    @SpirePatch(clz = Hexaghost.class, method = "update", paramtypez = {})
+    public static class HexaghostUpdateContext {
+        @SpirePrefixPatch
+        public static void before(Hexaghost __instance) {
+            if (active()) updatingHexaghost = __instance;
+        }
+
+        @SpirePostfixPatch
+        public static void after(Hexaghost __instance) {
+            updatingHexaghost = null;
+        }
+    }
+
+    @SpirePatch(clz = HexaghostOrb.class, method = "update", paramtypez = {float.class, float.class})
+    public static class HexaghostOrbEffects {
+        @SpireInstrumentPatch
+        public static ExprEditor instrument() {
+            return new ExprEditor() {
+                @Override
+                public void edit(NewExpr expr) throws CannotCompileException {
+                    String name = expr.getClassName();
+                    if (GhostlyFireEffect.class.getName().equals(name)
+                            || GhostlyWeakFireEffect.class.getName().equals(name)) {
+                        expr.replace("{ $1 = sts1portrait.PortraitCombatHud.hexaghostOrbX($1);"
+                                + " $2 = sts1portrait.PortraitCombatHud.hexaghostOrbY($2);"
+                                + " $_ = $proceed($$); }");
+                    }
+                }
+            };
         }
     }
 
@@ -960,7 +1023,9 @@ public final class PortraitCombatHud {
 
     private static float visibleBodyTop(AbstractMonster monster) {
         if (monster instanceof Hexaghost) {
-            return monster.drawY + (105f + 177f * hexaghostScale((Hexaghost) monster)) * Settings.scale;
+            Hexaghost boss = (Hexaghost) monster;
+            float s = hexaghostScale(boss);
+            return hexaghostTargetY(boss, s) + 185f * Settings.scale * s;
         }
         float offset = IntentBounds.TOP.get(monster).offset;
         return Float.isNaN(offset)
