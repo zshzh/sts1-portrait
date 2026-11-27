@@ -4,7 +4,7 @@
 
 | 组件 | 版本 | 获取 |
 | --- | --- | --- |
-| STS1 Portrait | `0.9.0-preview.69` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.69/STS1Portrait-0.9.0-preview.69.jar) · [源码](./mod) |
+| STS1 Portrait | `0.9.0-preview.70` | [下载 JAR](https://github.com/zshzh/sts1-portrait/releases/download/v0.9.0-preview.70/STS1Portrait-0.9.0-preview.70.jar) · [源码](./mod) |
 | Slay the Amethyst Plus | `1.6.7-plus.5` | [源码补丁与构建步骤](./launcher/README.md) |
 
 ## Android · Amethyst Plus
@@ -23,6 +23,8 @@
 DroidDeck 需要先由其虚拟显示器提供纵向分辨率，再加载本 MOD。DroidDeck 真机兼容性待验证。
 
 ## 当前版本
+
+- 修复竖屏战斗中小体型敌人的血条宽度不同步和血量数字视觉偏移。
 
 - 修复竖屏敌人详情的意图和状态小标题压住正文的问题，并调整段落间距。
 

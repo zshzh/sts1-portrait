@@ -4,6 +4,7 @@ import basemod.ReflectionHacks;
 import com.megacrit.cardcrawl.cards.AbstractCard;
 import com.megacrit.cardcrawl.cards.CardGroup;
 import com.megacrit.cardcrawl.characters.AbstractPlayer;
+import com.megacrit.cardcrawl.core.AbstractCreature;
 import com.megacrit.cardcrawl.core.OverlayMenu;
 import com.megacrit.cardcrawl.core.Settings;
 import com.megacrit.cardcrawl.dungeons.AbstractDungeon;
@@ -323,8 +324,23 @@ public final class PortraitBattle {
     }
 
     static void positionEnemy(AbstractMonster enemy, float centerX, float baseline, float unit) {
-        enemy.hb.width = Math.max(enemy.hb.width, unit * 0.13f);
-        enemy.hb_w = Math.max(enemy.hb_w, unit * 0.11f);
+        float previousWidth = enemy.hb.width;
+        float minWidth = unit * 0.13f;
+        if (enemy.hb.width < minWidth) {
+            enemy.hb.width = minWidth;
+        }
+        enemy.hb_w = Math.max(enemy.hb_w, enemy.hb.width);
+        if (enemy.healthHb.width < enemy.hb.width) {
+            enemy.healthHb.width = enemy.hb.width;
+        }
+        if (Math.abs(enemy.hb.width - previousWidth) > 0.5f && enemy.maxHealth > 0) {
+            float target = enemy.hb.width * enemy.currentHealth / (float) enemy.maxHealth;
+            float ratio = previousWidth > 1f ? enemy.hb.width / previousWidth : 1f;
+            float oldBar = ReflectionHacks.<Float>getPrivate(enemy, AbstractCreature.class, "healthBarWidth");
+            ReflectionHacks.setPrivate(enemy, AbstractCreature.class, "targetHealthBarWidth", target);
+            ReflectionHacks.setPrivate(enemy, AbstractCreature.class, "healthBarWidth",
+                    enemy.currentHealth == enemy.maxHealth ? target : Math.max(target, oldBar * ratio));
+        }
         enemy.drawX = centerX - enemy.hb_x;
         enemy.drawY = baseline - enemy.hb_y;
         enemy.hb.move(centerX + enemy.animX, baseline + enemy.hb_h * 0.5f);

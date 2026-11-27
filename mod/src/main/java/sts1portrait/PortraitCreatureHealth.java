@@ -71,6 +71,20 @@ public final class PortraitCreatureHealth {
         return nativeBarHalfWidth(player) * scale;
     }
 
+    private static void syncHealthBarWidth(AbstractCreature creature) {
+        if (creature == null || creature.maxHealth <= 0 || creature.hb == null) return;
+        float expected = creature.currentHealth <= 0 ? 0f
+                : creature.hb.width * creature.currentHealth / (float) creature.maxHealth;
+        float currentTarget = ReflectionHacks.<Float>getPrivate(creature, AbstractCreature.class, "targetHealthBarWidth");
+        if (Math.abs(currentTarget - expected) > 1.5f) {
+            float currentBar = ReflectionHacks.<Float>getPrivate(creature, AbstractCreature.class, "healthBarWidth");
+            ReflectionHacks.setPrivate(creature, AbstractCreature.class, "targetHealthBarWidth", expected);
+            if (creature.currentHealth == creature.maxHealth || currentBar < expected) {
+                ReflectionHacks.setPrivate(creature, AbstractCreature.class, "healthBarWidth", expected);
+            }
+        }
+    }
+
     private static float nativeBarHalfWidth(AbstractCreature creature) {
         // Each 24-pixel end cap contributes five visible columns.
         return creature.hb.width * .5f + (20f * 5f / 24f) * Settings.scale;
@@ -150,6 +164,7 @@ public final class PortraitCreatureHealth {
         transformed = false;
         compactPlayer = false;
         if (!PortraitBattle.active() || Settings.hideCombatElements) return;
+        syncHealthBarWidth(creature);
         compactPlayer = creature instanceof AbstractPlayer && Sts2Preview.compact();
         Hitbox hit = creature.hb;
         float x = hit.cX;
